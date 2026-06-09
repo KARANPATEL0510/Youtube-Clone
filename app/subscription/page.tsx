@@ -82,8 +82,16 @@ export default function SubscriptionPage() {
         ]);
         const premData = await premRes.json();
         const contentData = await contentRes.json();
-        setIsPremium(premData.isPremium === true);
-        setPremiumVideos(contentData.videos || []);
+        const isPrem = premData.isPremium === true;
+        setIsPremium(isPrem);
+        let videos = contentData.videos || [];
+        // Fallback: if premium user but no isPremiumContent videos, fetch regular videos
+        if (isPrem && videos.length === 0) {
+          const fallbackRes = await fetch('/api/uploads-list?limit=20');
+          const fallbackData = await fallbackRes.json();
+          videos = (fallbackData.uploads || []);
+        }
+        setPremiumVideos(videos);
       }
       setLoading(false);
     };
@@ -251,41 +259,13 @@ export default function SubscriptionPage() {
         </div>
       </div>
 
-      {/* Teaser cards for premium users */}
+      {/* No content fallback */}
       {allVideos.length === 0 && (
-        <>
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
-            <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
-            Exclusive Premium Videos
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {SAMPLE_PREMIUM.map((video) => (
-              <Link key={video.id} href={`/watch/${video.id}`}>
-                <div className="rounded-2xl overflow-hidden bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 hover:border-violet-300 dark:hover:border-violet-700 transition shadow-sm group">
-                  <div className="relative aspect-video bg-gray-200 dark:bg-gray-800">
-                    <Image src={video.thumbnailUrl} alt={video.title} fill className="object-cover" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition">
-                      <Play className="w-10 h-10 text-white opacity-0 group-hover:opacity-100 transition" />
-                    </div>
-                    <div className="absolute top-2 right-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-full p-1">
-                      <Crown className="w-3 h-3 text-white" />
-                    </div>
-                  </div>
-                  <div className="p-3">
-                    <h3 className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2 group-hover:text-violet-600 transition">
-                      {video.title}
-                    </h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-500">{video.category}</span>
-                      <span className="text-xs text-gray-400">·</span>
-                      <span className="text-xs text-gray-500">{(video.views / 1000).toFixed(0)}K views</span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Crown className="w-16 h-16 text-violet-300 mb-4" />
+          <h2 className="text-xl font-bold text-gray-700 dark:text-gray-300 mb-2">Premium Content Coming Soon</h2>
+          <p className="text-gray-500 dark:text-gray-400">Exclusive videos are being added. Check back soon!</p>
+        </div>
       )}
 
       {/* Real DB premium videos */}
