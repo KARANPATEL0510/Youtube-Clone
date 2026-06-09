@@ -6,6 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Crown, Lock, Play, Star, Zap, Shield, Loader2 } from 'lucide-react';
 import PremiumModal from '@/components/premium-modal';
+import { getAllVideos, Video as FirestoreVideo } from '@/lib/db/videos';
 
 interface PremiumVideo {
   id: string;
@@ -85,11 +86,19 @@ export default function SubscriptionPage() {
         const isPrem = premData.isPremium === true;
         setIsPremium(isPrem);
         let videos = contentData.videos || [];
-        // Fallback: if premium user but no isPremiumContent videos, fetch regular videos
+        // Fallback: if premium user but no isPremiumContent videos,
+        // fetch the same videos the Home page shows (Firestore + MongoDB)
         if (isPrem && videos.length === 0) {
-          const fallbackRes = await fetch('/api/uploads-list?limit=20');
-          const fallbackData = await fallbackRes.json();
-          videos = (fallbackData.uploads || []);
+          const [firestoreVideos, mongoRes] = await Promise.all([
+            getAllVideos().catch(() => [] as FirestoreVideo[]),
+            fetch('/api/uploads-list?limit=50').then(r => r.json()).catch(() => ({ uploads: [] })),
+          ]);
+          const mongoVideos = (mongoRes.uploads || []).filter((v: { isPremiumContent?: boolean }) => !v.isPremiumContent);
+          const combined = [
+            ...firestoreVideos.map(v => ({ id: v.id, title: v.title, thumbnailUrl: v.thumbnailUrl, videoUrl: v.videoUrl, category: v.category, views: v.views, likes: v.likes, createdAt: v.createdAt, description: v.description })),
+            ...mongoVideos,
+          ];
+          videos = combined;
         }
         setPremiumVideos(videos);
       }
