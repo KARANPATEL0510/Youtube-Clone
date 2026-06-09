@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Crown, Lock, Play, Star, Zap, Shield, Loader2 } from 'lucide-react';
+import { Crown, Lock, Play, Star, Zap, Shield, Loader2, X } from 'lucide-react';
 import PremiumModal from '@/components/premium-modal';
 import { getAllVideos, Video as FirestoreVideo } from '@/lib/db/videos';
+
+// Default working video for premium sample cards
+const DEFAULT_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 
 interface PremiumVideo {
   id: string;
@@ -72,6 +75,7 @@ export default function SubscriptionPage() {
   const [premiumVideos, setPremiumVideos] = useState<PremiumVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<{ title: string; videoUrl: string } | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -250,6 +254,26 @@ export default function SubscriptionPage() {
 
   return (
     <div className="flex-1 ml-64 p-8">
+      {/* Inline Video Modal */}
+      {selectedVideo && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setSelectedVideo(null)}>
+          <div className="relative w-full max-w-4xl bg-black rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-900">
+              <h3 className="text-white font-semibold text-sm truncate pr-4">{selectedVideo.title}</h3>
+              <button onClick={() => setSelectedVideo(null)} className="text-gray-400 hover:text-white transition flex-shrink-0">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <video
+              src={selectedVideo.videoUrl}
+              controls
+              autoPlay
+              className="w-full aspect-video bg-black"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Premium header */}
       <div className="flex items-center gap-4 mb-8">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center">
@@ -268,16 +292,46 @@ export default function SubscriptionPage() {
         </div>
       </div>
 
-      {/* No content fallback */}
+      {/* Sample premium cards when no DB videos — all play default video inline */}
       {allVideos.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <Crown className="w-16 h-16 text-violet-300 mb-4" />
-          <h2 className="text-xl font-bold text-gray-700 dark:text-gray-300 mb-2">Premium Content Coming Soon</h2>
-          <p className="text-gray-500 dark:text-gray-400">Exclusive videos are being added. Check back soon!</p>
-        </div>
+        <>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
+            <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
+            Exclusive Premium Videos
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {SAMPLE_PREMIUM.map((video) => (
+              <div
+                key={video.id}
+                className="rounded-2xl overflow-hidden bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 hover:border-violet-300 dark:hover:border-violet-700 transition shadow-sm group cursor-pointer"
+                onClick={() => setSelectedVideo({ title: video.title, videoUrl: DEFAULT_VIDEO_URL })}
+              >
+                <div className="relative aspect-video bg-gray-200 dark:bg-gray-800">
+                  <Image src={video.thumbnailUrl} alt={video.title} fill className="object-cover" />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition">
+                    <Play className="w-10 h-10 text-white opacity-0 group-hover:opacity-100 transition" />
+                  </div>
+                  <div className="absolute top-2 right-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-full p-1">
+                    <Crown className="w-3 h-3 text-white" />
+                  </div>
+                </div>
+                <div className="p-3">
+                  <h3 className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2 group-hover:text-violet-600 transition">
+                    {video.title}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-gray-500">{video.category}</span>
+                    <span className="text-xs text-gray-400">·</span>
+                    <span className="text-xs text-gray-500">{(video.views / 1000).toFixed(0)}K views</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
-      {/* Real DB premium videos */}
+      {/* Real DB videos — open inline player */}
       {allVideos.length > 0 && (
         <>
           <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
@@ -286,27 +340,29 @@ export default function SubscriptionPage() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {allVideos.map((video) => (
-              <Link key={video.id} href={`/watch/${video.id}`}>
-                <div className="rounded-2xl overflow-hidden bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 hover:border-violet-300 dark:hover:border-violet-700 transition shadow-sm group">
-                  <div className="relative aspect-video bg-gray-200 dark:bg-gray-800">
-                    {video.thumbnailUrl && (
-                      <Image src={video.thumbnailUrl} alt={video.title} fill className="object-cover" />
-                    )}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition">
-                      <Play className="w-10 h-10 text-white opacity-0 group-hover:opacity-100 transition" />
-                    </div>
-                    <div className="absolute top-2 right-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-full p-1">
-                      <Crown className="w-3 h-3 text-white" />
-                    </div>
+              <div
+                key={video.id}
+                className="rounded-2xl overflow-hidden bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 hover:border-violet-300 dark:hover:border-violet-700 transition shadow-sm group cursor-pointer"
+                onClick={() => setSelectedVideo({ title: video.title, videoUrl: video.videoUrl || DEFAULT_VIDEO_URL })}
+              >
+                <div className="relative aspect-video bg-gray-200 dark:bg-gray-800">
+                  {video.thumbnailUrl && (
+                    <Image src={video.thumbnailUrl} alt={video.title} fill className="object-cover" />
+                  )}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition">
+                    <Play className="w-10 h-10 text-white opacity-0 group-hover:opacity-100 transition" />
                   </div>
-                  <div className="p-3">
-                    <h3 className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2 group-hover:text-violet-600 transition">
-                      {video.title}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-1">{video.category} · {video.views?.toLocaleString() || 0} views</p>
+                  <div className="absolute top-2 right-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-full p-1">
+                    <Crown className="w-3 h-3 text-white" />
                   </div>
                 </div>
-              </Link>
+                <div className="p-3">
+                  <h3 className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2 group-hover:text-violet-600 transition">
+                    {video.title}
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1">{video.category} · {video.views?.toLocaleString() || 0} views</p>
+                </div>
+              </div>
             ))}
           </div>
         </>
