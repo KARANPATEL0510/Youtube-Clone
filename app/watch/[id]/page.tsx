@@ -132,7 +132,7 @@ export default function WatchPage() {
     fetch(`/api/premium/status?userId=${user.uid}`)
       .then(r => r.json())
       .then(d => setIsPremium(d.isPremium === true))
-      .catch(() => {});
+      .catch(() => { });
   }, [user]);
 
   const handleDownload = async () => {
@@ -223,7 +223,7 @@ export default function WatchPage() {
       }
     } catch {
       // fallback
-      await navigator.clipboard.writeText(url).catch(() => {});
+      await navigator.clipboard.writeText(url).catch(() => { });
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     }
@@ -253,7 +253,26 @@ export default function WatchPage() {
   }
 
   if (!video) {
-    return <div className="p-8 text-center text-red-600">{error || 'Video not found'}</div>;
+    // Premium sample IDs → redirect to subscription page
+    if (typeof videoId === 'string' && /^premium-\d+$/.test(videoId)) {
+      router.replace('/subscription');
+      return null;
+    }
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[70vh] p-8 text-center">
+        <div className="text-6xl mb-4">🎬</div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Video not found</h1>
+        <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-sm">
+          This video may have been removed or the link is incorrect.
+        </p>
+        <button
+          onClick={() => router.push('/')}
+          className="px-6 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition"
+        >
+          Back to Home
+        </button>
+      </div>
+    );
   }
 
   // Premium video gate — non-premium users see upgrade wall
@@ -312,7 +331,7 @@ export default function WatchPage() {
               onClick={() => user ? setShowPremiumModal(true) : router.push('/auth')}
               className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold hover:opacity-90 transition shadow-lg flex items-center justify-center gap-2"
             >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
               Upgrade to Premium
             </button>
           </div>
@@ -372,10 +391,10 @@ export default function WatchPage() {
               const errorCode = vid.error?.code;
               const errorMsg =
                 errorCode === 4 ? 'Video format not supported by your browser' :
-                errorCode === 3 ? 'Video loading was aborted' :
-                errorCode === 2 ? 'Network error while loading video' :
-                errorCode === 1 ? 'Video loading was aborted by user' :
-                'Unknown video error';
+                  errorCode === 3 ? 'Video loading was aborted' :
+                    errorCode === 2 ? 'Network error while loading video' :
+                      errorCode === 1 ? 'Video loading was aborted by user' :
+                        'Unknown video error';
               setVideoError(errorMsg);
             }}
             onLoadedData={() => setVideoError(null)}
@@ -412,11 +431,10 @@ export default function WatchPage() {
             <button
               onClick={handleLike}
               disabled={likeLoading}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full transition disabled:opacity-60 ${
-                isLiked
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full transition disabled:opacity-60 ${isLiked
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300'
+                }`}
             >
               {likeLoading ? (
                 <span className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />
@@ -430,11 +448,10 @@ export default function WatchPage() {
             <div className="relative">
               <button
                 onClick={handleShare}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full transition ${
-                  copied
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full transition ${copied
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300'
+                  }`}
               >
                 {copied ? <Check className="w-5 h-5" /> : <Share2 className="w-5 h-5" />}
                 {copied ? 'Copied!' : 'Share'}
@@ -445,11 +462,10 @@ export default function WatchPage() {
               onClick={handleDownload}
               disabled={downloadLoading}
               title={isPremium ? 'Download video (Premium)' : 'Download video (1/day free)'}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full transition disabled:opacity-60 ${
-                downloadSuccess
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full transition disabled:opacity-60 ${downloadSuccess
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300'
+                }`}
             >
               {downloadLoading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
