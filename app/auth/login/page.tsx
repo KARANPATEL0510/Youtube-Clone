@@ -408,7 +408,7 @@ export default function LoginPage() {
                 {isSouthIndia ? <MailIcon /> : <PhoneIcon />}
                 <span>
                   {isSouthIndia
-                    ? 'As you're in South India, an OTP will be sent to your registered email.'
+                    ? 'As you\\'re in South India, an OTP will be sent to your registered email.'
                     : 'An OTP will be sent to your registered mobile number after login.'}
                 </span>
               </div>

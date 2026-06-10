@@ -343,8 +343,8 @@ export default function SignupPage() {
               <span className="mt-0.5">{isSouthIndia ? '📧' : '📱'}</span>
               <span>
                 {isSouthIndia
-                  ? 'Since you're in South India, your OTP will be sent to your email after each login.'
-                  : 'Since you're outside South India, your OTP will be sent via SMS — please add your phone number above.'}
+                  ? 'Since you\\'re in South India, your OTP will be sent to your email after each login.'
+                  : 'Since you\\'re outside South India, your OTP will be sent via SMS — please add your phone number above.'}
               </span>
             </div>
           )}
