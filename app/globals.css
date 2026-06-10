@@ -123,10 +123,86 @@
   }
   body {
     @apply bg-background text-foreground;
+    transition: background-color 0.4s ease, color 0.3s ease;
   }
   html {
     @apply font-sans;
   }
+}
+
+/* ── Theme-aware OTP / Auth utilities ──────────────────────── */
+.auth-card {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  transition: background-color 0.4s ease, border-color 0.3s ease;
+}
+
+.auth-input {
+  background: var(--input);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.auth-input:focus {
+  outline: none;
+  border-color: oklch(0.577 0.245 27.325);
+  box-shadow: 0 0 0 3px oklch(0.577 0.245 27.325 / 20%);
+}
+
+/* OTP digit input */
+.otp-input {
+  background: var(--muted);
+  color: var(--foreground);
+  border: 2px solid var(--border);
+  border-radius: 0.5rem;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.otp-input:focus {
+  outline: none;
+  border-color: oklch(0.577 0.245 27.325);
+  box-shadow: 0 0 0 3px oklch(0.577 0.245 27.325 / 20%);
+}
+
+/* Step indicator animations */
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.step-enter-right { animation: slideInRight 0.35s ease both; }
+.step-enter-left  { animation: slideInLeft  0.35s ease both; }
+
+/* Theme badge */
+.theme-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.theme-badge-light {
+  background: oklch(0.97 0.04 95);
+  color: oklch(0.45 0.12 85);
+  border: 1px solid oklch(0.85 0.07 95);
+}
+.theme-badge-dark {
+  background: oklch(0.25 0 0);
+  color: oklch(0.75 0 0);
+  border: 1px solid oklch(0.35 0 0);
 }
 
 

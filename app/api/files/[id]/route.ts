@@ -3,6 +3,9 @@ import connectDB from '@/lib/mongodb';
 import mongoose from 'mongoose';
 import { ObjectId } from 'mongodb';
 
+// Allow up to 60s for video streaming on Vercel (max on Hobby plan)
+export const maxDuration = 60;
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB();

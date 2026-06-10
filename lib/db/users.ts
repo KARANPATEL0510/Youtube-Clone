@@ -16,6 +16,7 @@ export interface User {
   email: string;
   displayName: string;
   photoURL?: string;
+  phone?: string;
   createdAt: number;
 }
 
@@ -23,7 +24,8 @@ export const createUserProfile = async (
   uid: string,
   email: string,
   displayName: string,
-  photoURL?: string
+  photoURL?: string,
+  phone?: string
 ) => {
   try {
     const userRef = doc(getFirebaseDb(), 'users', uid);
@@ -32,6 +34,7 @@ export const createUserProfile = async (
       email,
       displayName,
       photoURL: photoURL || '',
+      phone: phone || '',
       createdAt: Date.now(),
     });
   } catch (error) {
