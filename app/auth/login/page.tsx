@@ -9,11 +9,15 @@ import { useThemeLocation } from '@/lib/contexts/theme-location-context';
 import {
   generateOtp,
   sendOtpToEmail,
-  sendOtpToPhone,
   verifyOtp,
   OTP_EXPIRY_MS,
 } from '@/lib/otp-utils';
-import { auth } from '@/lib/firebase';
+import { getFirebaseAuth } from '@/lib/firebase';
+import {
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  ConfirmationResult,
+} from 'firebase/auth';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -90,25 +94,32 @@ export default function LoginPage() {
   // Step 2 state
   const [step, setStep] = useState<Step>('credentials');
   const [otpValue, setOtpValue] = useState('');
-  const [storedOtp, setStoredOtp] = useState('');
   const [otpChannel, setOtpChannel] = useState<'email' | 'phone'>('email');
   const [otpTarget, setOtpTarget] = useState('');
-  const [otpExpiresAt, setOtpExpiresAt] = useState(0);
   const [otpSent, setOtpSent] = useState(false);
+
+  // Email OTP state (South India)
+  const [storedOtp, setStoredOtp] = useState('');
+  const [otpExpiresAt, setOtpExpiresAt] = useState(0);
+
+  // Firebase Phone Auth state (non-South India)
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   // Shared state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Countdown timer
+  // Countdown timer (email OTP only)
   const [secondsLeft, setSecondsLeft] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
 
-  // Start countdown when OTP is sent
+  // Start countdown when email OTP is sent
   useEffect(() => {
-    if (!otpSent) return;
+    if (!otpSent || otpChannel !== 'email') return;
     setSecondsLeft(Math.ceil(OTP_EXPIRY_MS / 1000));
     timerRef.current = setInterval(() => {
       setSecondsLeft((s) => {
@@ -120,7 +131,7 @@ export default function LoginPage() {
       });
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [otpSent]);
+  }, [otpSent, otpChannel]);
 
   // Focus OTP input when step changes
   useEffect(() => {
@@ -128,6 +139,17 @@ export default function LoginPage() {
       setTimeout(() => otpInputRef.current?.focus(), 350);
     }
   }, [step]);
+
+  // Initialize invisible reCAPTCHA for phone auth
+  const initRecaptcha = () => {
+    if (recaptchaVerifierRef.current) return recaptchaVerifierRef.current;
+    const auth = getFirebaseAuth();
+    const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+      size: 'invisible',
+    });
+    recaptchaVerifierRef.current = verifier;
+    return verifier;
+  };
 
   // ── Step 1: credentials ─────────────────────────────────────────────────────
   const handleCredentials = async (e: React.FormEvent) => {
@@ -139,47 +161,46 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      // Authenticate with Firebase
       const fbUser = await loginUser(email, password);
-
-      // Determine OTP channel
       const channel = isSouthIndia ? 'email' : 'phone';
       setOtpChannel(channel);
 
-      let target = '';
       if (channel === 'email') {
-        target = fbUser.email || email;
+        // ── Email OTP (South India) ──────────────────────────────────────────
+        const target = fbUser.email || email;
+        setOtpTarget(target);
+        const otp = generateOtp();
+        setStoredOtp(otp);
+        setOtpExpiresAt(Date.now() + OTP_EXPIRY_MS);
+        await sendOtpToEmail(target, otp);
+        setOtpSent(true);
+        setSuccess(`OTP sent to your email: ${maskEmail(target)}`);
+        setStep('otp');
       } else {
-        // Fetch phone from Firestore profile
+        // ── Firebase Phone Auth (outside South India) ────────────────────────
         const profile = await getUserProfile(fbUser.uid);
-        target = profile?.phone || '';
-        if (!target) {
+        const phone = profile?.phone || '';
+        if (!phone) {
           throw new Error(
-            'No phone number found on your account. Please update your profile or contact support.'
+            'No phone number found on your account. Please update your profile.'
           );
         }
+        setOtpTarget(phone);
+
+        const verifier = initRecaptcha();
+        const auth = getFirebaseAuth();
+        const result = await signInWithPhoneNumber(auth, phone, verifier);
+        setConfirmationResult(result);
+        setOtpSent(true);
+        setSuccess(`OTP sent to your phone: ${maskPhone(phone)}`);
+        setStep('otp');
       }
-      setOtpTarget(target);
-
-      // Generate & send OTP
-      const otp = generateOtp();
-      setStoredOtp(otp);
-      setOtpExpiresAt(Date.now() + OTP_EXPIRY_MS);
-
-      if (channel === 'email') {
-        await sendOtpToEmail(target, otp);
-      } else {
-        await sendOtpToPhone(target, otp);
-      }
-
-      setOtpSent(true);
-      setSuccess(
-        channel === 'email'
-          ? `OTP sent to your email: ${maskEmail(target)}`
-          : `OTP sent to your phone: ${maskPhone(target)}`
-      );
-      setStep('otp');
     } catch (err) {
+      // Reset reCAPTCHA on error so it can be re-used
+      if (recaptchaVerifierRef.current) {
+        recaptchaVerifierRef.current.clear();
+        recaptchaVerifierRef.current = null;
+      }
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
     } finally {
       setLoading(false);
@@ -195,15 +216,21 @@ export default function LoginPage() {
       setError('Please enter the 6-digit OTP.');
       return;
     }
-    if (Date.now() > otpExpiresAt) {
-      setError('OTP has expired. Please go back and try again.');
-      return;
-    }
 
     setLoading(true);
     try {
-      const valid = verifyOtp(otpValue.trim(), storedOtp);
-      if (!valid) throw new Error('Invalid OTP. Please check and try again.');
+      if (otpChannel === 'email') {
+        // Email OTP — verify locally
+        if (Date.now() > otpExpiresAt) {
+          throw new Error('OTP has expired. Please go back and try again.');
+        }
+        const valid = verifyOtp(otpValue.trim(), storedOtp);
+        if (!valid) throw new Error('Invalid OTP. Please check and try again.');
+      } else {
+        // Phone OTP — verify with Firebase
+        if (!confirmationResult) throw new Error('Session expired. Please go back and try again.');
+        await confirmationResult.confirm(otpValue.trim());
+      }
       router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed.');
@@ -216,18 +243,27 @@ export default function LoginPage() {
   const handleResend = async () => {
     setError(null);
     setOtpValue('');
-    const otp = generateOtp();
-    setStoredOtp(otp);
-    setOtpExpiresAt(Date.now() + OTP_EXPIRY_MS);
     try {
       if (otpChannel === 'email') {
+        const otp = generateOtp();
+        setStoredOtp(otp);
+        setOtpExpiresAt(Date.now() + OTP_EXPIRY_MS);
         await sendOtpToEmail(otpTarget, otp);
+        setOtpSent((v) => !v);
+        setTimeout(() => setOtpSent(true), 50);
+        setSuccess('A new OTP has been sent to your email.');
       } else {
-        await sendOtpToPhone(otpTarget, otp);
+        // Reset reCAPTCHA and resend
+        if (recaptchaVerifierRef.current) {
+          recaptchaVerifierRef.current.clear();
+          recaptchaVerifierRef.current = null;
+        }
+        const verifier = initRecaptcha();
+        const auth = getFirebaseAuth();
+        const result = await signInWithPhoneNumber(auth, otpTarget, verifier);
+        setConfirmationResult(result);
+        setSuccess('A new OTP has been sent to your phone.');
       }
-      setOtpSent((v) => !v); // toggle to restart effect
-      setTimeout(() => setOtpSent(true), 50);
-      setSuccess('A new OTP has been sent.');
     } catch {
       setError('Failed to resend OTP. Please try again.');
     }
@@ -241,17 +277,13 @@ export default function LoginPage() {
     : 'min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-gray-100 to-amber-50';
 
   const cardClass = `auth-card w-full max-w-md rounded-2xl shadow-2xl p-8 relative overflow-hidden`;
-
   const inputClass = `auth-input w-full px-4 py-3 rounded-xl text-sm`;
-
   const btnPrimary = `w-full py-3 rounded-xl font-semibold text-sm text-white
     bg-gradient-to-r from-red-600 to-rose-500
     hover:from-red-700 hover:to-rose-600
     active:scale-[0.98] transition-all duration-200
     disabled:opacity-50 disabled:cursor-not-allowed`;
-
   const btnGhost = `text-sm font-medium text-red-500 hover:underline disabled:opacity-40`;
-
   const stepClass = step === 'credentials' ? 'step-enter-left' : 'step-enter-right';
 
   const formatTime = (s: number) =>
@@ -259,11 +291,11 @@ export default function LoginPage() {
 
   return (
     <div className={pageClass}>
+      {/* Invisible reCAPTCHA container required by Firebase Phone Auth */}
+      <div id="recaptcha-container" ref={recaptchaContainerRef} />
+
       {/* Background decoration */}
-      <div
-        className="absolute inset-0 pointer-events-none overflow-hidden"
-        aria-hidden="true"
-      >
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div
           className="absolute -top-40 -right-40 w-80 h-80 rounded-full opacity-10"
           style={{ background: 'radial-gradient(circle, oklch(0.577 0.245 27.325), transparent)' }}
@@ -480,24 +512,40 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Timer */}
-            <div className="flex items-center justify-between text-sm">
-              <span style={{ color: 'var(--muted-foreground)' }}>
-                {secondsLeft > 0 ? (
-                  <>OTP expires in <span className="font-semibold tabular-nums">{formatTime(secondsLeft)}</span></>
-                ) : (
-                  <span className="text-red-400 font-medium">OTP expired</span>
-                )}
-              </span>
-              <button
-                type="button"
-                className={btnGhost}
-                onClick={handleResend}
-                disabled={loading}
-              >
-                Resend OTP
-              </button>
-            </div>
+            {/* Timer (email only) */}
+            {otpChannel === 'email' && (
+              <div className="flex items-center justify-between text-sm">
+                <span style={{ color: 'var(--muted-foreground)' }}>
+                  {secondsLeft > 0 ? (
+                    <>OTP expires in <span className="font-semibold tabular-nums">{formatTime(secondsLeft)}</span></>
+                  ) : (
+                    <span className="text-red-400 font-medium">OTP expired</span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className={btnGhost}
+                  onClick={handleResend}
+                  disabled={loading}
+                >
+                  Resend OTP
+                </button>
+              </div>
+            )}
+
+            {/* Resend for phone */}
+            {otpChannel === 'phone' && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className={btnGhost}
+                  onClick={handleResend}
+                  disabled={loading}
+                >
+                  Resend OTP
+                </button>
+              </div>
+            )}
 
             {/* Step progress */}
             <div className="flex items-center gap-2 pt-1">
@@ -505,7 +553,11 @@ export default function LoginPage() {
               <div className="flex-1 h-1 rounded-full" style={{ background: 'oklch(0.577 0.245 27.325)' }}/>
             </div>
 
-            <button type="submit" className={btnPrimary} disabled={loading || secondsLeft === 0}>
+            <button
+              type="submit"
+              className={btnPrimary}
+              disabled={loading || (otpChannel === 'email' && secondsLeft === 0)}
+            >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
