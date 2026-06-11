@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -14,6 +14,29 @@ import PremiumModal from '@/components/premium-modal';
 const isMongoId = (id: string) => /^[a-f0-9]{24}$/i.test(id);
 
 export default function WatchPage() {
+  // Gesture states & refs
+  const [feedback, setFeedback] = useState<{ text: string; id: number } | null>(null);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const commentsRef = useRef<HTMLDivElement>(null);
+
+  const tapStates = useRef({
+    left: { count: 0, timer: null as NodeJS.Timeout | null },
+    center: { count: 0, timer: null as NodeJS.Timeout | null },
+    right: { count: 0, timer: null as NodeJS.Timeout | null },
+  });
+
+  const showFeedback = (text: string) => {
+    setFeedback({ text, id: Date.now() });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (tapStates.current.left.timer) clearTimeout(tapStates.current.left.timer);
+      if (tapStates.current.center.timer) clearTimeout(tapStates.current.center.timer);
+      if (tapStates.current.right.timer) clearTimeout(tapStates.current.right.timer);
+    };
+  }, []);
   const params = useParams();
   const router = useRouter();
   const videoId = params.id as string;
@@ -34,6 +57,74 @@ export default function WatchPage() {
   const [isPremium, setIsPremium] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [isVideoBlocked, setIsVideoBlocked] = useState(false);
+
+  const executeAction = (zone: 'left' | 'center' | 'right', count: number) => {
+    if (zone === 'left') {
+      if (count === 2) {
+        if (videoRef.current) {
+          const newTime = Math.max(0, videoRef.current.currentTime - 10);
+          videoRef.current.currentTime = newTime;
+          showFeedback('⏪ -10s');
+        }
+      } else if (count === 3) {
+        commentsRef.current?.scrollIntoView({ behavior: 'smooth' });
+        showFeedback('💬 Comments Opened');
+      }
+    } else if (zone === 'center') {
+      if (count === 1) {
+        if (videoRef.current) {
+          if (videoRef.current.paused) {
+            videoRef.current.play().catch(() => {});
+            showFeedback('▶ Playing');
+          } else {
+            videoRef.current.pause();
+            showFeedback('⏸ Paused');
+          }
+        }
+      } else if (count === 3) {
+        if (relatedVideos.length > 0) {
+          showFeedback('⏭ Next Video');
+          setTimeout(() => {
+            router.push(`/watch/${relatedVideos[0].id}`);
+          }, 600);
+        } else {
+          showFeedback('⏭ No next video in queue');
+        }
+      }
+    } else if (zone === 'right') {
+      if (count === 2) {
+        if (videoRef.current) {
+          const newTime = Math.min(videoRef.current.duration || 0, videoRef.current.currentTime + 10);
+          videoRef.current.currentTime = newTime;
+          showFeedback('⏩ +10s');
+        }
+      } else if (count === 3) {
+        showFeedback('🚪 Exit Triggered');
+        setShowExitModal(true);
+      }
+    }
+  };
+
+  const handleZoneTap = (zone: 'left' | 'center' | 'right', e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const state = tapStates.current[zone];
+    if (state.timer) {
+      clearTimeout(state.timer);
+    }
+    state.count += 1;
+    if (state.count === 3) {
+      executeAction(zone, 3);
+      state.count = 0;
+      state.timer = null;
+      return;
+    }
+    state.timer = setTimeout(() => {
+      executeAction(zone, state.count);
+      state.count = 0;
+      state.timer = null;
+    }, 280);
+  };
 
   const getVideoMimeType = (url: string): string => {
     if (url.includes('.mov') || url.includes('MOV')) return 'video/quicktime';
@@ -357,7 +448,7 @@ export default function WatchPage() {
       {/* ── Main Column ── */}
       <div className="flex-1 min-w-0">
         {/* Video Player */}
-        <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-4">
+        <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-4 group">
           {videoError && (
             <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
               <div className="text-center text-white max-w-md">
@@ -380,6 +471,7 @@ export default function WatchPage() {
             </div>
           )}
           <video
+            ref={videoRef}
             key={video.id}
             controls
             controlsList="nodownload"
@@ -403,6 +495,37 @@ export default function WatchPage() {
             <source src={video.videoUrl} type={getVideoMimeType(video.videoUrl)} />
             Your browser does not support the video tag.
           </video>
+
+          {/* Transparent Gesture Target Overlay (covers top 80%) */}
+          <div className="absolute top-0 left-0 right-0 h-[80%] flex z-10 select-none">
+            <div
+              onClick={(e) => handleZoneTap('left', e)}
+              className="w-1/3 h-full cursor-pointer bg-transparent"
+              title="Double Tap: Rewind | Triple Tap: Comments"
+            />
+            <div
+              onClick={(e) => handleZoneTap('center', e)}
+              className="w-1/3 h-full cursor-pointer bg-transparent"
+              title="Single Tap: Play/Pause | Triple Tap: Next Video"
+            />
+            <div
+              onClick={(e) => handleZoneTap('right', e)}
+              className="w-1/3 h-full cursor-pointer bg-transparent"
+              title="Double Tap: Forward | Triple Tap: Close Site"
+            />
+          </div>
+
+          {/* Feedback Overlay */}
+          {feedback && (
+            <div
+              key={feedback.id}
+              className="absolute inset-0 flex items-center justify-center pointer-events-none z-20"
+            >
+              <div className="bg-black/80 text-white px-5 py-2.5 rounded-full text-base font-bold flex items-center gap-2 animate-gesture-pop shadow-lg border border-white/10">
+                {feedback.text}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Title */}
@@ -510,7 +633,7 @@ export default function WatchPage() {
         </div>
 
         {/* ── Comments Section ── */}
-        <div className="border-t dark:border-gray-700 pt-2">
+        <div ref={commentsRef} className="border-t dark:border-gray-700 pt-2">
           <Comments videoId={videoId} />
         </div>
       </div>
@@ -540,6 +663,40 @@ export default function WatchPage() {
           ))}
         </div>
       </div>
+
+      {/* Exit Confirmation Modal */}
+      {showExitModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center border border-gray-100 dark:border-gray-700 animate-in fade-in zoom-in duration-200">
+            <div className="text-4xl mb-3">🚪</div>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Close Website?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+              Are you sure you want to close this website and stop watching?
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => {
+                  setShowExitModal(false);
+                  showFeedback('🚪 Exiting...');
+                  setTimeout(() => {
+                    window.close();
+                    router.push('/');
+                  }, 500);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold transition"
+              >
+                Leave
+              </button>
+              <button
+                onClick={() => setShowExitModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
