@@ -6,12 +6,7 @@ import Link from 'next/link';
 import { loginUser } from '@/lib/db/auth';
 import { getUserProfile } from '@/lib/db/users';
 import { useThemeLocation } from '@/lib/contexts/theme-location-context';
-import { getFirebaseAuth } from '@/lib/firebase';
-import {
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  ConfirmationResult,
-} from 'firebase/auth';
+import { sendOtp, verifyOtpOnServer } from '@/lib/otp-utils';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -78,7 +73,7 @@ type Step = 'credentials' | 'otp';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { theme, isSouthIndia, locationLoading, detectedState } = useThemeLocation();
+  const { theme, locationLoading, detectedState } = useThemeLocation();
 
   // Step 1 state
   const [email, setEmail] = useState('');
@@ -90,11 +85,6 @@ export default function LoginPage() {
   const [otpValue, setOtpValue] = useState('');
   const [otpTarget, setOtpTarget] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-
-  // Firebase Phone Auth state
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
-  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   // Shared state
   const [loading, setLoading] = useState(false);
@@ -110,17 +100,6 @@ export default function LoginPage() {
     }
   }, [step]);
 
-  // Initialize invisible reCAPTCHA for phone auth
-  const initRecaptcha = () => {
-    if (recaptchaVerifierRef.current) return recaptchaVerifierRef.current;
-    const auth = getFirebaseAuth();
-    const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-      size: 'invisible',
-    });
-    recaptchaVerifierRef.current = verifier;
-    return verifier;
-  };
-
   // ── Step 1: credentials ─────────────────────────────────────────────────────
   const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,7 +112,7 @@ export default function LoginPage() {
     try {
       const fbUser = await loginUser(email, password);
 
-      // ── Firebase Phone Auth ────────────────────────
+      // Fetch profile to get user's phone number
       const profile = await getUserProfile(fbUser.uid);
       const phone = profile?.phone || '';
       if (!phone) {
@@ -143,19 +122,12 @@ export default function LoginPage() {
       }
       setOtpTarget(phone);
 
-      const verifier = initRecaptcha();
-      const auth = getFirebaseAuth();
-      const result = await signInWithPhoneNumber(auth, phone, verifier);
-      setConfirmationResult(result);
+      // Send OTP via backend (generates code and logs to development console)
+      await sendOtp(phone);
       setOtpSent(true);
-      setSuccess(`OTP sent to your phone: ${maskPhone(phone)}`);
+      setSuccess(`OTP generated! Check your terminal console logs to verify.`);
       setStep('otp');
     } catch (err) {
-      // Reset reCAPTCHA on error so it can be re-used
-      if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear();
-        recaptchaVerifierRef.current = null;
-      }
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
     } finally {
       setLoading(false);
@@ -174,9 +146,10 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      // Phone OTP — verify with Firebase
-      if (!confirmationResult) throw new Error('Session expired. Please go back and try again.');
-      await confirmationResult.confirm(otpValue.trim());
+      const valid = await verifyOtpOnServer(otpTarget, otpValue.trim());
+      if (!valid) {
+        throw new Error('Invalid or expired OTP. Check your terminal console logs.');
+      }
       router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed.');
@@ -190,16 +163,8 @@ export default function LoginPage() {
     setError(null);
     setOtpValue('');
     try {
-      // Reset reCAPTCHA and resend
-      if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear();
-        recaptchaVerifierRef.current = null;
-      }
-      const verifier = initRecaptcha();
-      const auth = getFirebaseAuth();
-      const result = await signInWithPhoneNumber(auth, otpTarget, verifier);
-      setConfirmationResult(result);
-      setSuccess('A new OTP has been sent to your phone.');
+      await sendOtp(otpTarget);
+      setSuccess('A new OTP has been generated! Check your terminal console logs.');
     } catch {
       setError('Failed to resend OTP. Please try again.');
     }
@@ -224,9 +189,6 @@ export default function LoginPage() {
 
   return (
     <div className={pageClass}>
-      {/* Invisible reCAPTCHA container required by Firebase Phone Auth */}
-      <div id="recaptcha-container" ref={recaptchaContainerRef} />
-
       {/* Background decoration */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div
@@ -281,7 +243,7 @@ export default function LoginPage() {
           <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
             {step === 'credentials'
               ? 'Sign in to continue to YouTube Clone'
-              : '📱 Check your phone for the OTP'}
+              : '📱 Check your terminal console logs for the OTP'}
           </p>
         </div>
 
@@ -369,7 +331,7 @@ export default function LoginPage() {
             >
               <PhoneIcon />
               <span>
-                An OTP will be sent to your registered mobile number after login.
+                An OTP will be generated and printed to your terminal console logs after login.
               </span>
             </div>
 
@@ -412,7 +374,7 @@ export default function LoginPage() {
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
-                  SMS OTP
+                  SMS OTP (Console)
                 </p>
                 <p className="text-sm font-medium truncate max-w-[220px]">{otpTarget}</p>
               </div>
