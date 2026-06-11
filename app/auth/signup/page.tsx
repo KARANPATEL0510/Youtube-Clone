@@ -88,7 +88,7 @@ export default function SignupPage() {
     e.preventDefault();
     setError(null);
 
-    if (!displayName || !email || !password) {
+    if (!displayName || !email || !password || !phone) {
       setError('Please fill in all required fields.');
       return;
     }
@@ -96,7 +96,7 @@ export default function SignupPage() {
       setError('Password must be at least 6 characters.');
       return;
     }
-    if (phone && !/^\+?[0-9\s\-()]{7,15}$/.test(phone)) {
+    if (!/^\+?[0-9\s\-()]{7,15}$/.test(phone)) {
       setError('Please enter a valid phone number (e.g. +91 98765 43210).');
       return;
     }
@@ -106,8 +106,8 @@ export default function SignupPage() {
       // Register with Firebase Auth
       const user = await registerUser(email, password);
 
-      // Create Firestore profile (with optional phone)
-      await createUserProfile(user.uid, email, displayName, undefined, phone || undefined);
+      // Create Firestore profile (with phone)
+      await createUserProfile(user.uid, email, displayName, undefined, phone);
 
       router.push('/');
     } catch (err) {
@@ -248,13 +248,7 @@ export default function SignupPage() {
           {/* Phone number */}
           <div>
             <label className="block text-sm font-medium mb-1.5" htmlFor="signup-phone">
-              Phone number
-              <span
-                className="ml-2 text-xs font-normal px-1.5 py-0.5 rounded"
-                style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
-              >
-                for SMS OTP
-              </span>
+              Phone number <span style={{ color: 'oklch(0.577 0.245 27.325)' }}>*</span>
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-foreground)' }}>
@@ -272,7 +266,7 @@ export default function SignupPage() {
               />
             </div>
             <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-              Required for users outside South India to receive OTP via SMS.
+              Required to receive login verification OTP via SMS.
             </p>
           </div>
 
@@ -335,19 +329,15 @@ export default function SignupPage() {
           </div>
 
           {/* OTP info notice */}
-          {!locationLoading && (
-            <div
-              className="flex items-start gap-3 text-xs px-3 py-2.5 rounded-lg"
-              style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
-            >
-              <span className="mt-0.5">{isSouthIndia ? '📧' : '📱'}</span>
-              <span>
-                {isSouthIndia
-                  ? 'Since you're in South India, your OTP will be sent to your email after each login.'
-                  : 'Since you're outside South India, your OTP will be sent via SMS — please add your phone number above.'}
-              </span>
-            </div>
-          )}
+          <div
+            className="flex items-start gap-3 text-xs px-3 py-2.5 rounded-lg"
+            style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
+          >
+            <span className="mt-0.5">📱</span>
+            <span>
+              Your OTP will be sent via SMS to your registered mobile number after login.
+            </span>
+          </div>
 
           <button type="submit" className={btnPrimary} disabled={loading}>
             {loading ? (
