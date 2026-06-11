@@ -222,9 +222,6 @@ export default function LoginPage() {
   const btnGhost = `text-sm font-medium text-red-500 hover:underline disabled:opacity-40`;
   const stepClass = step === 'credentials' ? 'step-enter-left' : 'step-enter-right';
 
-  const formatTime = (s: number) =>
-    `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-
   return (
     <div className={pageClass}>
       {/* Invisible reCAPTCHA container required by Firebase Phone Auth */}
