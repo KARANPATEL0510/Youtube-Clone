@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Share2, MoreVertical, Trash2, ThumbsUp, Check, Download, Loader2 } from 'lucide-react';
+import { Share2, MoreVertical, Trash2, ThumbsUp, Check, Download, Loader2, Crown } from 'lucide-react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { getVideo, getVideosByCategory, Video } from '@/lib/db/videos';
 import { likeVideo, unlikeVideo, addToHistory } from '@/lib/db/interactions';
@@ -57,6 +57,9 @@ export default function WatchPage() {
   const [isPremium, setIsPremium] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [isVideoBlocked, setIsVideoBlocked] = useState(false);
+  const [activePlan, setActivePlan] = useState<'free' | 'bronze' | 'silver' | 'gold'>('free');
+  const [videoLimit, setVideoLimit] = useState(300);
+  const [limitReached, setLimitReached] = useState(false);
 
   const executeAction = (zone: 'left' | 'center' | 'right', count: number) => {
     if (zone === 'left') {
@@ -124,6 +127,14 @@ export default function WatchPage() {
       state.count = 0;
       state.timer = null;
     }, 280);
+  };
+
+  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const videoEl = e.currentTarget;
+    if (videoLimit > 0 && videoEl.currentTime > videoLimit) {
+      videoEl.pause();
+      setLimitReached(true);
+    }
   };
 
   const getVideoMimeType = (url: string): string => {
@@ -219,11 +230,23 @@ export default function WatchPage() {
 
   // Fetch premium status when user changes
   useEffect(() => {
-    if (!user) { setIsPremium(false); return; }
+    if (!user) {
+      setIsPremium(false);
+      setActivePlan('free');
+      setVideoLimit(300);
+      return;
+    }
     fetch(`/api/premium/status?userId=${user.uid}`)
       .then(r => r.json())
-      .then(d => setIsPremium(d.isPremium === true))
-      .catch(() => { });
+      .then(d => {
+        setIsPremium(d.isPremium === true);
+        setActivePlan(d.plan || 'free');
+        setVideoLimit(d.videoTimeLimit || 300);
+      })
+      .catch(() => {
+        setActivePlan('free');
+        setVideoLimit(300);
+      });
   }, [user]);
 
   const handleDownload = async () => {
@@ -442,7 +465,17 @@ export default function WatchPage() {
         <PremiumModal
           userId={user.uid}
           onClose={() => setShowPremiumModal(false)}
-          onSuccess={() => setIsPremium(true)}
+          onSuccess={() => {
+            setIsPremium(true);
+            setLimitReached(false);
+            fetch(`/api/premium/status?userId=${user.uid}`)
+              .then(r => r.json())
+              .then(d => {
+                setIsPremium(d.isPremium === true);
+                setActivePlan(d.plan || 'free');
+                setVideoLimit(d.videoTimeLimit || 300);
+              });
+          }}
         />
       )}
       {/* ── Main Column ── */}
@@ -478,6 +511,7 @@ export default function WatchPage() {
             style={{ maxHeight: '500px', width: '100%' }}
             onCanPlay={() => setVideoError(null)}
             onLoadedMetadata={() => setVideoError(null)}
+            onTimeUpdate={handleTimeUpdate}
             onError={(e) => {
               const vid = e.currentTarget;
               const errorCode = vid.error?.code;
@@ -495,6 +529,32 @@ export default function WatchPage() {
             <source src={video.videoUrl} type={getVideoMimeType(video.videoUrl)} />
             Your browser does not support the video tag.
           </video>
+
+          {/* Time Limit Reached Overlay */}
+          {limitReached && (
+            <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center text-center p-6 z-30 animate-in fade-in duration-300">
+              <Crown className="w-12 h-12 text-yellow-400 mb-3 animate-bounce" />
+              <h3 className="text-xl font-bold text-white mb-2">Time Limit Reached</h3>
+              <p className="text-sm text-gray-300 max-w-sm mb-6">
+                You are on the <span className="font-bold text-violet-400 uppercase">{activePlan}</span> plan (limited to {videoLimit / 60} minutes of playback). Upgrade your subscription to watch further!
+              </p>
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={() => setShowPremiumModal(true)}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold hover:scale-105 transition shadow-lg flex items-center gap-2"
+                >
+                  <Crown className="w-4 h-4" />
+                  Upgrade Plan
+                </button>
+                <button
+                  onClick={() => router.push('/')}
+                  className="px-6 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold transition"
+                >
+                  Back to Home
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Transparent Gesture Target Overlay (covers top 80%) */}
           <div className="absolute top-0 left-0 right-0 h-[80%] flex z-10 select-none">

@@ -3,8 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 // POST /api/premium/create-order
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await req.json();
+    const { userId, plan } = await req.json();
     if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
+
+    const selectedPlan = plan || 'gold';
+    const planPrices: Record<string, number> = {
+      bronze: 10,
+      silver: 50,
+      gold: 100,
+    };
+    const price = planPrices[selectedPlan] || 100;
+    const amount = price * 100; // convert to paise
 
     const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
     const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
@@ -13,7 +22,7 @@ export async function POST(req: NextRequest) {
       // Fallback mock order (no keys configured)
       return NextResponse.json({
         orderId: `mock_order_${Date.now()}`,
-        amount: 49900,
+        amount,
         currency: 'INR',
         keyId: 'rzp_test_demo',
         isMock: true,
@@ -21,8 +30,6 @@ export async function POST(req: NextRequest) {
     }
 
     const auth = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
-
-    // Razorpay receipt max 40 chars
     const receipt = `prem_${Date.now().toString().slice(-10)}`;
 
     const response = await fetch('https://api.razorpay.com/v1/orders', {
@@ -32,7 +39,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        amount: 49900, // ₹499 in paise
+        amount,
         currency: 'INR',
         receipt,
       }),
