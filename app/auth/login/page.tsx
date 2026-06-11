@@ -112,20 +112,12 @@ export default function LoginPage() {
     try {
       const fbUser = await loginUser(email, password);
 
-      // Fetch profile to get user's phone number
-      const profile = await getUserProfile(fbUser.uid);
-      const phone = profile?.phone || '';
-      if (!phone) {
-        throw new Error(
-          'No phone number found on your account. Please update your profile.'
-        );
-      }
-      setOtpTarget(phone);
+      setOtpTarget(email);
 
-      // Send OTP via backend (generates code and logs to development console)
-      await sendOtp(phone);
+      // Send OTP via backend
+      await sendOtp(email);
       setOtpSent(true);
-      setSuccess(`OTP generated! Check your terminal console logs to verify.`);
+      setSuccess(`OTP generated! Check your email inbox or terminal console logs.`);
       setStep('otp');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
@@ -240,10 +232,10 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold mt-3">
             {step === 'credentials' ? 'Welcome back' : 'Verify your identity'}
           </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+          <p className="text-sm mt-1 text-center px-4" style={{ color: 'var(--muted-foreground)' }}>
             {step === 'credentials'
               ? 'Sign in to continue to YouTube Clone'
-              : '📱 Check your terminal console logs for the OTP'}
+              : '📧 Check your email inbox (and spam folder) or terminal console for the OTP'}
           </p>
         </div>
 
@@ -329,9 +321,9 @@ export default function LoginPage() {
               className="flex items-start gap-3 text-xs px-3 py-2.5 rounded-lg"
               style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
             >
-              <PhoneIcon />
+              <MailIcon />
               <span>
-                An OTP will be generated and printed to your terminal console logs after login.
+                A verification OTP will be sent to your email address and logged to your terminal console after login.
               </span>
             </div>
 
@@ -370,11 +362,11 @@ export default function LoginPage() {
                 className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center"
                 style={{ background: 'oklch(0.577 0.245 27.325 / 15%)', color: 'oklch(0.577 0.245 27.325)' }}
               >
-                <PhoneIcon />
+                <MailIcon />
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
-                  SMS OTP (Console)
+                  Email OTP
                 </p>
                 <p className="text-sm font-medium truncate max-w-[220px]">{otpTarget}</p>
               </div>
