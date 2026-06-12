@@ -4,6 +4,7 @@ import "./globals.css";
 import Header from "@/components/header";
 import Sidebar from "@/components/sidebar";
 import CategoryTab from "@/components/category-tab";
+import CallManager from "@/components/call-manager";
 import { AuthProvider } from "@/lib/contexts/auth-context";
 import { CategoryProvider } from "@/lib/contexts/category-context";
 import { ThemeLocationProvider } from "@/lib/contexts/theme-location-context";
@@ -35,6 +36,7 @@ export default function RootLayout({
                   </div>
                 </main>
               </div>
+              <CallManager />
             </CategoryProvider>
           </AuthProvider>
         </ThemeLocationProvider>

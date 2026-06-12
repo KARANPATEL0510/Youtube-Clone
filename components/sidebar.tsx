@@ -12,7 +12,8 @@ import {
   User,
   PlaySquare,
   PlusSquare,
-  Download
+  Download,
+  Video
 } from "lucide-react";
 
 const Sidebar = () => {
@@ -22,6 +23,7 @@ const Sidebar = () => {
     { name: "Home", icon: Home, path: "/" },
     { name: "Explore", icon: Compass, path: "/explore" },
     { name: "Subscription", icon: Users, path: "/subscription" },
+    { name: "Friends & Calls", icon: Video, path: "/friends" },
     { name: "History", icon: History, path: "/history" },
     { name: "Liked videos", icon: ThumbsUp, path: "/liked" },
     { name: "Watch later", icon: Clock, path: "/watch-later" },

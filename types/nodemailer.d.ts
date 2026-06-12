@@ -1,2 +1,4 @@
-// Deprecated: Nodemailer is no longer used in the project.
-export {};
+declare module 'nodemailer' {
+  const nodemailer: any;
+  export default nodemailer;
+}
