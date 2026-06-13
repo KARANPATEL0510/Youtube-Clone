@@ -120,14 +120,14 @@ export default function SubscriptionPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="flex-1 ml-64 flex items-center justify-center min-h-screen">
+      <div className="flex-1 flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
       </div>
     );
   }
 
   return (
-    <div className="flex-1 ml-64 p-8">
+    <div className="flex-1 p-8">
       {showModal && user && (
         <PremiumModal
           userId={user.uid}

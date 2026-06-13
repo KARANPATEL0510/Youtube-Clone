@@ -34,7 +34,7 @@ const Sidebar = () => {
   ];
 
   return (
-    <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-64 overflow-y-auto bg-white border-r dark:bg-black dark:border-gray-800">
+    <aside className="sticky top-14 h-[calc(100vh-3.5rem)] w-16 md:w-64 flex-shrink-0 overflow-y-auto bg-white border-r dark:bg-black dark:border-gray-800 transition-all duration-300 z-40">
       <div className="py-2">
         {menuItems.map((item) => {
           const isActive = pathname === item.path;
@@ -43,14 +43,14 @@ const Sidebar = () => {
             <Link
               key={item.name}
               href={item.path}
-              className={`w-full flex items-center gap-4 px-4 py-2 transition-colors ${
+              className={`w-full flex flex-col md:flex-row items-center gap-1 md:gap-4 px-1 md:px-4 py-3 md:py-2 transition-colors ${
                 isActive 
-                  ? "bg-gray-100 dark:bg-gray-800 text-black-600" 
+                  ? "bg-gray-100 dark:bg-gray-800 text-black-600 animate-pulse-subtle" 
                   : "hover:bg-gray-100 dark:hover:bg-gray-800"
               }`}
             >
-              <item.icon className={`w-5 h-5 ${isActive ? "text-black-600" : ""}`} />
-              <span className={`text-sm ${isActive ? "font-semibold" : ""}`}>
+              <item.icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${isActive ? "text-black-600" : ""}`} />
+              <span className={`text-[10px] md:text-sm truncate w-full text-center md:text-left ${isActive ? "font-semibold text-black dark:text-white" : "text-gray-650 dark:text-zinc-400"}`}>
                 {item.name}
               </span>
             </Link>
