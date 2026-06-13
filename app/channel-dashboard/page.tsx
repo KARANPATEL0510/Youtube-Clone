@@ -67,18 +67,25 @@ export default function ChannelDashboardPage() {
   }, [user]);
 
   if (loading || pageLoading) {
-    return <div className="p-8">Loading...</div>;
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[60vh]">
+        <div className="text-gray-900 dark:text-white flex items-center gap-2 font-medium">
+          <span className="w-5 h-5 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></span>
+          Loading...
+        </div>
+      </div>
+    );
   }
 
   if (error) {
     return (
       <div className="max-w-4xl mx-auto p-8">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+        <div className="bg-red-100 dark:bg-red-950/40 border border-red-400 dark:border-red-900 text-red-700 dark:text-red-400 px-4 py-3 rounded mb-4">
           {error}
         </div>
         <button
           onClick={() => router.push('/create-channel')}
-          className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700"
+          className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition"
         >
           Create Channel
         </button>
@@ -89,10 +96,10 @@ export default function ChannelDashboardPage() {
   if (!channel) {
     return (
       <div className="max-w-4xl mx-auto p-8 text-center">
-        <p className="text-gray-600 mb-4">Channel not found</p>
+        <p className="text-gray-600 dark:text-zinc-400 mb-4">Channel not found</p>
         <button
           onClick={() => router.push('/create-channel')}
-          className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700"
+          className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition"
         >
           Create Channel
         </button>
@@ -101,20 +108,20 @@ export default function ChannelDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-55 dark:bg-zinc-950 transition-colors duration-300">
       {/* Channel Header */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 transition-colors duration-300">
         <div className="max-w-6xl mx-auto px-6 py-8">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-4xl font-bold text-gray-900">{channel.channelName}</h1>
-              <p className="text-gray-600 mt-2">{channel.description}</p>
+              <h1 className="text-4xl font-bold text-gray-900 dark:text-white">{channel.channelName}</h1>
+              <p className="text-gray-600 dark:text-zinc-400 mt-2">{channel.description}</p>
               <div className="flex gap-6 mt-4 text-sm">
-                <span className="text-gray-600">
-                  <strong className="text-gray-900">{uploads.length}</strong> videos
+                <span className="text-gray-600 dark:text-zinc-400">
+                  <strong className="text-gray-900 dark:text-white">{uploads.length}</strong> videos
                 </span>
-                <span className="text-gray-600">
-                  <strong className="text-gray-900">{channel.subscriberCount}</strong> subscribers
+                <span className="text-gray-600 dark:text-zinc-400">
+                  <strong className="text-gray-900 dark:text-white">{channel.subscriberCount}</strong> subscribers
                 </span>
               </div>
             </div>
@@ -129,7 +136,7 @@ export default function ChannelDashboardPage() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 transition-colors duration-300">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex gap-8">
             {[
@@ -142,8 +149,8 @@ export default function ChannelDashboardPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`py-4 px-2 border-b-2 font-medium transition ${
                   activeTab === tab.id
-                    ? 'border-red-600 text-red-600'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                    ? 'border-red-600 text-red-600 dark:text-red-500'
+                    : 'border-transparent text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
                 }`}
               >
                 {tab.icon} {tab.label}
@@ -157,10 +164,10 @@ export default function ChannelDashboardPage() {
       <div className="max-w-6xl mx-auto px-6 py-8">
         {activeTab === 'videos' && (
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Your Videos</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Your Videos</h2>
             {uploads.length === 0 ? (
-              <div className="bg-gray-100 rounded-lg p-12 text-center">
-                <p className="text-gray-600 mb-4">No videos uploaded yet</p>
+              <div className="bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-lg p-12 text-center">
+                <p className="text-gray-600 dark:text-zinc-400 mb-4">No videos uploaded yet</p>
                 <Link
                   href="/upload"
                   className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-6 rounded-lg inline-block"
@@ -175,7 +182,7 @@ export default function ChannelDashboardPage() {
                     <div
                       key={video._id}
                       onClick={() => setPreviewVideo(video)}
-                      className="bg-white rounded-lg shadow overflow-hidden hover:shadow-lg transition cursor-pointer"
+                      className="bg-white dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-lg shadow dark:shadow-black/50 overflow-hidden hover:shadow-lg dark:hover:shadow-black transition cursor-pointer"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -184,20 +191,20 @@ export default function ChannelDashboardPage() {
                         className="w-full h-40 object-cover"
                       />
                       <div className="p-4">
-                        <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+                        <h3 className="font-semibold text-gray-900 dark:text-white mb-2 line-clamp-2">
                           {video.title}
                         </h3>
-                        <div className="flex justify-between items-center text-sm text-gray-600">
+                        <div className="flex justify-between items-center text-sm text-gray-600 dark:text-zinc-400">
                           <span>{video.views} views</span>
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
                             video.visibility === 'public'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
+                              ? 'bg-green-100 dark:bg-green-950/40 text-green-800 dark:text-green-400'
+                              : 'bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-zinc-300'
                           }`}>
                             {video.visibility}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-2">
+                        <p className="text-xs text-gray-500 dark:text-zinc-500 mt-2">
                           {new Date(video.createdAt).toLocaleDateString()}
                         </p>
                       </div>
@@ -208,7 +215,7 @@ export default function ChannelDashboardPage() {
                 {/* Video Preview Modal */}
                 {previewVideo && (
                   <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onClick={() => setPreviewVideo(null)}>
-                    <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-lg shadow-lg max-w-2xl w-full mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
                       <div className="relative aspect-video bg-black">
                         <video
                           src={previewVideo.videoUrl}
@@ -220,17 +227,17 @@ export default function ChannelDashboardPage() {
                       <div className="p-6">
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h2 className="text-2xl font-bold text-gray-900 mb-2">{previewVideo.title}</h2>
-                            <p className="text-gray-600">{previewVideo.views} views</p>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{previewVideo.title}</h2>
+                            <p className="text-gray-600 dark:text-zinc-400">{previewVideo.views} views</p>
                           </div>
                           <button
                             onClick={() => setPreviewVideo(null)}
-                            className="text-gray-500 hover:text-gray-700 text-2xl"
+                            className="text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-white text-2xl"
                           >
                             ×
                           </button>
                         </div>
-                        <p className="text-gray-700 mb-4">{previewVideo.description}</p>
+                        <p className="text-gray-700 dark:text-zinc-300 mb-4">{previewVideo.description}</p>
                         <div className="flex gap-2">
                           <Link
                             href={`/watch/${previewVideo._id}`}
@@ -240,7 +247,7 @@ export default function ChannelDashboardPage() {
                           </Link>
                           <button
                             onClick={() => setPreviewVideo(null)}
-                            className="bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold py-2 px-6 rounded-lg"
+                            className="bg-gray-200 dark:bg-zinc-800 hover:bg-gray-300 dark:hover:bg-zinc-700 text-gray-900 dark:text-white font-semibold py-2 px-6 rounded-lg"
                           >
                             Close
                           </button>
@@ -256,7 +263,7 @@ export default function ChannelDashboardPage() {
 
         {activeTab === 'analytics' && (
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Channel Analytics</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Channel Analytics</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
                 { label: 'Total Views', value: uploads.reduce((sum, v) => sum + v.views, 0), icon: '👁️' },
@@ -264,10 +271,10 @@ export default function ChannelDashboardPage() {
                 { label: 'Subscribers', value: channel.subscriberCount, icon: '👥' },
                 { label: 'Channel Age', value: '0 days', icon: '📅' },
               ].map((stat) => (
-                <div key={stat.label} className="bg-white rounded-lg shadow p-6">
+                <div key={stat.label} className="bg-white dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-lg shadow dark:shadow-black/50 p-6">
                   <div className="text-2xl mb-2">{stat.icon}</div>
-                  <p className="text-gray-600 text-sm mb-1">{stat.label}</p>
-                  <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
+                  <p className="text-gray-600 dark:text-zinc-400 text-sm mb-1">{stat.label}</p>
+                  <p className="text-3xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
                 </div>
               ))}
             </div>
@@ -276,9 +283,9 @@ export default function ChannelDashboardPage() {
 
         {activeTab === 'settings' && (
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Channel Settings</h2>
-            <div className="bg-white rounded-lg shadow p-6">
-              <p className="text-gray-600 mb-4">Channel settings coming soon...</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Channel Settings</h2>
+            <div className="bg-white dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-lg shadow dark:shadow-black/50 p-6">
+              <p className="text-gray-600 dark:text-zinc-400 mb-4">Channel settings coming soon...</p>
               <button
                 onClick={() => {
                   /* Handle settings update */
