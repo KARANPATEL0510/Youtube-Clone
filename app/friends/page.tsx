@@ -459,6 +459,23 @@ export default function FriendsPage() {
                         >
                           Cancel Request
                         </button>
+                        {process.env.NODE_ENV !== 'production' ? (
+                          <button
+                            onClick={() => handleAccept(req.id)}
+                            className="p-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition text-xs font-semibold px-3 ml-2"
+                            title="Dev Mode Bypass: Accept this request instantly"
+                          >
+                            Dev: Accept Request
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleAccept(req.id)}
+                            className="p-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition text-xs font-semibold px-3 ml-2"
+                            title="Bypass: Accept this request instantly"
+                          >
+                            Accept Request (Bypass)
+                          </button>
+                        )}
                       </div>
                     );
                   })}
