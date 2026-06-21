@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IPremiumUser extends Document {
   userId: string;
   isPremium: boolean;
+  plan?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   activatedAt?: Date;
@@ -12,6 +13,7 @@ export interface IPremiumUser extends Document {
 const PremiumUserSchema = new Schema({
   userId: { type: String, required: true, unique: true, index: true },
   isPremium: { type: Boolean, default: false },
+  plan: { type: String, enum: ['free', 'bronze', 'silver', 'gold'], default: 'free' },
   razorpayOrderId: { type: String },
   razorpayPaymentId: { type: String },
   activatedAt: { type: Date },

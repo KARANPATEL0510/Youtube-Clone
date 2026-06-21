@@ -49,7 +49,8 @@ const nextConfig: NextConfig = {
   },
   // Tell Turbopack NOT to bundle ffmpeg-static — it ships a native binary
   // and must be loaded at runtime directly from node_modules.
-  serverExternalPackages: ['ffmpeg-static'],
+  // nodemailer v8 is ESM-only — must NOT be bundled by Next.js
+  serverExternalPackages: ['ffmpeg-static', 'nodemailer'],
 };
 
 export default nextConfig;

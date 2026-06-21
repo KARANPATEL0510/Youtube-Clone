@@ -6,18 +6,7 @@ import Link from 'next/link';
 import { loginUser } from '@/lib/db/auth';
 import { getUserProfile } from '@/lib/db/users';
 import { useThemeLocation } from '@/lib/contexts/theme-location-context';
-import {
-  generateOtp,
-  sendOtpToEmail,
-  verifyOtp,
-  OTP_EXPIRY_MS,
-} from '@/lib/otp-utils';
-import { getFirebaseAuth } from '@/lib/firebase';
-import {
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  ConfirmationResult,
-} from 'firebase/auth';
+import { sendOtp, verifyOtpOnServer } from '@/lib/otp-utils';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -84,7 +73,7 @@ type Step = 'credentials' | 'otp';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { theme, isSouthIndia, locationLoading, detectedState } = useThemeLocation();
+  const { theme, locationLoading, detectedState } = useThemeLocation();
 
   // Step 1 state
   const [email, setEmail] = useState('');
@@ -94,44 +83,15 @@ export default function LoginPage() {
   // Step 2 state
   const [step, setStep] = useState<Step>('credentials');
   const [otpValue, setOtpValue] = useState('');
-  const [otpChannel, setOtpChannel] = useState<'email' | 'phone'>('email');
   const [otpTarget, setOtpTarget] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-
-  // Email OTP state (South India)
-  const [storedOtp, setStoredOtp] = useState('');
-  const [otpExpiresAt, setOtpExpiresAt] = useState(0);
-
-  // Firebase Phone Auth state (non-South India)
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
-  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   // Shared state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Countdown timer (email OTP only)
-  const [secondsLeft, setSecondsLeft] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
-
-  // Start countdown when email OTP is sent
-  useEffect(() => {
-    if (!otpSent || otpChannel !== 'email') return;
-    setSecondsLeft(Math.ceil(OTP_EXPIRY_MS / 1000));
-    timerRef.current = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          clearInterval(timerRef.current!);
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [otpSent, otpChannel]);
 
   // Focus OTP input when step changes
   useEffect(() => {
@@ -139,17 +99,6 @@ export default function LoginPage() {
       setTimeout(() => otpInputRef.current?.focus(), 350);
     }
   }, [step]);
-
-  // Initialize invisible reCAPTCHA for phone auth
-  const initRecaptcha = () => {
-    if (recaptchaVerifierRef.current) return recaptchaVerifierRef.current;
-    const auth = getFirebaseAuth();
-    const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-      size: 'invisible',
-    });
-    recaptchaVerifierRef.current = verifier;
-    return verifier;
-  };
 
   // ── Step 1: credentials ─────────────────────────────────────────────────────
   const handleCredentials = async (e: React.FormEvent) => {
@@ -162,45 +111,15 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const fbUser = await loginUser(email, password);
-      const channel = isSouthIndia ? 'email' : 'phone';
-      setOtpChannel(channel);
 
-      if (channel === 'email') {
-        // ── Email OTP (South India) ──────────────────────────────────────────
-        const target = fbUser.email || email;
-        setOtpTarget(target);
-        const otp = generateOtp();
-        setStoredOtp(otp);
-        setOtpExpiresAt(Date.now() + OTP_EXPIRY_MS);
-        await sendOtpToEmail(target, otp);
-        setOtpSent(true);
-        setSuccess(`OTP sent to your email: ${maskEmail(target)}`);
-        setStep('otp');
-      } else {
-        // ── Firebase Phone Auth (outside South India) ────────────────────────
-        const profile = await getUserProfile(fbUser.uid);
-        const phone = profile?.phone || '';
-        if (!phone) {
-          throw new Error(
-            'No phone number found on your account. Please update your profile.'
-          );
-        }
-        setOtpTarget(phone);
+      setOtpTarget(email);
 
-        const verifier = initRecaptcha();
-        const auth = getFirebaseAuth();
-        const result = await signInWithPhoneNumber(auth, phone, verifier);
-        setConfirmationResult(result);
-        setOtpSent(true);
-        setSuccess(`OTP sent to your phone: ${maskPhone(phone)}`);
-        setStep('otp');
-      }
+      // Send OTP via backend
+      await sendOtp(email);
+      setOtpSent(true);
+      setSuccess(`OTP generated! Check your email inbox or terminal console logs.`);
+      setStep('otp');
     } catch (err) {
-      // Reset reCAPTCHA on error so it can be re-used
-      if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear();
-        recaptchaVerifierRef.current = null;
-      }
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
     } finally {
       setLoading(false);
@@ -219,17 +138,9 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      if (otpChannel === 'email') {
-        // Email OTP — verify locally
-        if (Date.now() > otpExpiresAt) {
-          throw new Error('OTP has expired. Please go back and try again.');
-        }
-        const valid = verifyOtp(otpValue.trim(), storedOtp);
-        if (!valid) throw new Error('Invalid OTP. Please check and try again.');
-      } else {
-        // Phone OTP — verify with Firebase
-        if (!confirmationResult) throw new Error('Session expired. Please go back and try again.');
-        await confirmationResult.confirm(otpValue.trim());
+      const valid = await verifyOtpOnServer(otpTarget, otpValue.trim());
+      if (!valid) {
+        throw new Error('Invalid or expired OTP. Check your terminal console logs.');
       }
       router.push('/');
     } catch (err) {
@@ -244,26 +155,8 @@ export default function LoginPage() {
     setError(null);
     setOtpValue('');
     try {
-      if (otpChannel === 'email') {
-        const otp = generateOtp();
-        setStoredOtp(otp);
-        setOtpExpiresAt(Date.now() + OTP_EXPIRY_MS);
-        await sendOtpToEmail(otpTarget, otp);
-        setOtpSent((v) => !v);
-        setTimeout(() => setOtpSent(true), 50);
-        setSuccess('A new OTP has been sent to your email.');
-      } else {
-        // Reset reCAPTCHA and resend
-        if (recaptchaVerifierRef.current) {
-          recaptchaVerifierRef.current.clear();
-          recaptchaVerifierRef.current = null;
-        }
-        const verifier = initRecaptcha();
-        const auth = getFirebaseAuth();
-        const result = await signInWithPhoneNumber(auth, otpTarget, verifier);
-        setConfirmationResult(result);
-        setSuccess('A new OTP has been sent to your phone.');
-      }
+      await sendOtp(otpTarget);
+      setSuccess('A new OTP has been generated! Check your terminal console logs.');
     } catch {
       setError('Failed to resend OTP. Please try again.');
     }
@@ -286,14 +179,8 @@ export default function LoginPage() {
   const btnGhost = `text-sm font-medium text-red-500 hover:underline disabled:opacity-40`;
   const stepClass = step === 'credentials' ? 'step-enter-left' : 'step-enter-right';
 
-  const formatTime = (s: number) =>
-    `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-
   return (
     <div className={pageClass}>
-      {/* Invisible reCAPTCHA container required by Firebase Phone Auth */}
-      <div id="recaptcha-container" ref={recaptchaContainerRef} />
-
       {/* Background decoration */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div
@@ -345,12 +232,10 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold mt-3">
             {step === 'credentials' ? 'Welcome back' : 'Verify your identity'}
           </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+          <p className="text-sm mt-1 text-center px-4" style={{ color: 'var(--muted-foreground)' }}>
             {step === 'credentials'
               ? 'Sign in to continue to YouTube Clone'
-              : isSouthIndia
-              ? '📧 Check your email for the OTP'
-              : '📱 Check your phone for the OTP'}
+              : '📧 Check your email inbox (and spam folder) or terminal console for the OTP'}
           </p>
         </div>
 
@@ -432,19 +317,15 @@ export default function LoginPage() {
             </div>
 
             {/* OTP info callout */}
-            {!locationLoading && (
-              <div
-                className="flex items-start gap-3 text-xs px-3 py-2.5 rounded-lg"
-                style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
-              >
-                {isSouthIndia ? <MailIcon /> : <PhoneIcon />}
-                <span>
-                  {isSouthIndia
-                    ? "As you're in South India, an OTP will be sent to your registered email."
-                    : "An OTP will be sent to your registered mobile number after login."}
-                </span>
-              </div>
-            )}
+            <div
+              className="flex items-start gap-3 text-xs px-3 py-2.5 rounded-lg"
+              style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
+            >
+              <MailIcon />
+              <span>
+                A verification OTP will be sent to your email address and logged to your terminal console after login.
+              </span>
+            </div>
 
             <button type="submit" className={btnPrimary} disabled={loading}>
               {loading ? (
@@ -481,11 +362,11 @@ export default function LoginPage() {
                 className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center"
                 style={{ background: 'oklch(0.577 0.245 27.325 / 15%)', color: 'oklch(0.577 0.245 27.325)' }}
               >
-                {otpChannel === 'email' ? <MailIcon /> : <PhoneIcon />}
+                <MailIcon />
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
-                  {otpChannel === 'email' ? 'Email OTP' : 'SMS OTP'}
+                  Email OTP
                 </p>
                 <p className="text-sm font-medium truncate max-w-[220px]">{otpTarget}</p>
               </div>
@@ -512,40 +393,17 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Timer (email only) */}
-            {otpChannel === 'email' && (
-              <div className="flex items-center justify-between text-sm">
-                <span style={{ color: 'var(--muted-foreground)' }}>
-                  {secondsLeft > 0 ? (
-                    <>OTP expires in <span className="font-semibold tabular-nums">{formatTime(secondsLeft)}</span></>
-                  ) : (
-                    <span className="text-red-400 font-medium">OTP expired</span>
-                  )}
-                </span>
-                <button
-                  type="button"
-                  className={btnGhost}
-                  onClick={handleResend}
-                  disabled={loading}
-                >
-                  Resend OTP
-                </button>
-              </div>
-            )}
-
             {/* Resend for phone */}
-            {otpChannel === 'phone' && (
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className={btnGhost}
-                  onClick={handleResend}
-                  disabled={loading}
-                >
-                  Resend OTP
-                </button>
-              </div>
-            )}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className={btnGhost}
+                onClick={handleResend}
+                disabled={loading}
+              >
+                Resend OTP
+              </button>
+            </div>
 
             {/* Step progress */}
             <div className="flex items-center gap-2 pt-1">
@@ -556,7 +414,7 @@ export default function LoginPage() {
             <button
               type="submit"
               className={btnPrimary}
-              disabled={loading || (otpChannel === 'email' && secondsLeft === 0)}
+              disabled={loading}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -604,12 +462,6 @@ export default function LoginPage() {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function maskEmail(email: string): string {
-  const [user, domain] = email.split('@');
-  if (!user || !domain) return email;
-  return `${user.slice(0, 2)}${'*'.repeat(Math.max(0, user.length - 2))}@${domain}`;
-}
 
 function maskPhone(phone: string): string {
   if (phone.length < 6) return phone;

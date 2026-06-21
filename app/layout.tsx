@@ -4,6 +4,7 @@ import "./globals.css";
 import Header from "@/components/header";
 import Sidebar from "@/components/sidebar";
 import CategoryTab from "@/components/category-tab";
+import CallManager from "@/components/call-manager";
 import { AuthProvider } from "@/lib/contexts/auth-context";
 import { CategoryProvider } from "@/lib/contexts/category-context";
 import { ThemeLocationProvider } from "@/lib/contexts/theme-location-context";
@@ -28,13 +29,14 @@ export default function RootLayout({
               <Header />
               <div className="flex">
                 <Sidebar />
-                <main className="flex-1 ml-64 mt-14">
+                <main className="flex-1 mt-14 min-w-0 transition-all duration-300">
                   <CategoryTab />
                   <div className="p-4">
                     {children}
                   </div>
                 </main>
               </div>
+              <CallManager />
             </CategoryProvider>
           </AuthProvider>
         </ThemeLocationProvider>

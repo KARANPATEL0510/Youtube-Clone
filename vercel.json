@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "app/api/send-otp/route.ts": {
+      "maxDuration": 15
+    },
+    "app/api/verify-otp/route.ts": {
+      "maxDuration": 10
+    }
+  }
+}

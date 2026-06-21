@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Share2, MoreVertical, Trash2, ThumbsUp, Check, Download, Loader2 } from 'lucide-react';
+import { Share2, MoreVertical, Trash2, ThumbsUp, Check, Download, Loader2, Crown } from 'lucide-react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { getVideo, getVideosByCategory, Video } from '@/lib/db/videos';
 import { likeVideo, unlikeVideo, addToHistory } from '@/lib/db/interactions';
@@ -14,6 +14,29 @@ import PremiumModal from '@/components/premium-modal';
 const isMongoId = (id: string) => /^[a-f0-9]{24}$/i.test(id);
 
 export default function WatchPage() {
+  // Gesture states & refs
+  const [feedback, setFeedback] = useState<{ text: string; id: number } | null>(null);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const commentsRef = useRef<HTMLDivElement>(null);
+
+  const tapStates = useRef({
+    left: { count: 0, timer: null as NodeJS.Timeout | null },
+    center: { count: 0, timer: null as NodeJS.Timeout | null },
+    right: { count: 0, timer: null as NodeJS.Timeout | null },
+  });
+
+  const showFeedback = (text: string) => {
+    setFeedback({ text, id: Date.now() });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (tapStates.current.left.timer) clearTimeout(tapStates.current.left.timer);
+      if (tapStates.current.center.timer) clearTimeout(tapStates.current.center.timer);
+      if (tapStates.current.right.timer) clearTimeout(tapStates.current.right.timer);
+    };
+  }, []);
   const params = useParams();
   const router = useRouter();
   const videoId = params.id as string;
@@ -34,6 +57,85 @@ export default function WatchPage() {
   const [isPremium, setIsPremium] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [isVideoBlocked, setIsVideoBlocked] = useState(false);
+  const [activePlan, setActivePlan] = useState<'free' | 'bronze' | 'silver' | 'gold'>('free');
+  const [videoLimit, setVideoLimit] = useState(300);
+  const [limitReached, setLimitReached] = useState(false);
+
+  const executeAction = (zone: 'left' | 'center' | 'right', count: number) => {
+    if (zone === 'left') {
+      if (count === 2) {
+        if (videoRef.current) {
+          const newTime = Math.max(0, videoRef.current.currentTime - 10);
+          videoRef.current.currentTime = newTime;
+          showFeedback('⏪ -10s');
+        }
+      } else if (count === 3) {
+        commentsRef.current?.scrollIntoView({ behavior: 'smooth' });
+        showFeedback('💬 Comments Opened');
+      }
+    } else if (zone === 'center') {
+      if (count === 1) {
+        if (videoRef.current) {
+          if (videoRef.current.paused) {
+            videoRef.current.play().catch(() => {});
+            showFeedback('▶ Playing');
+          } else {
+            videoRef.current.pause();
+            showFeedback('⏸ Paused');
+          }
+        }
+      } else if (count === 3) {
+        if (relatedVideos.length > 0) {
+          showFeedback('⏭ Next Video');
+          setTimeout(() => {
+            router.push(`/watch/${relatedVideos[0].id}`);
+          }, 600);
+        } else {
+          showFeedback('⏭ No next video in queue');
+        }
+      }
+    } else if (zone === 'right') {
+      if (count === 2) {
+        if (videoRef.current) {
+          const newTime = Math.min(videoRef.current.duration || 0, videoRef.current.currentTime + 10);
+          videoRef.current.currentTime = newTime;
+          showFeedback('⏩ +10s');
+        }
+      } else if (count === 3) {
+        showFeedback('🚪 Exit Triggered');
+        setShowExitModal(true);
+      }
+    }
+  };
+
+  const handleZoneTap = (zone: 'left' | 'center' | 'right', e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const state = tapStates.current[zone];
+    if (state.timer) {
+      clearTimeout(state.timer);
+    }
+    state.count += 1;
+    if (state.count === 3) {
+      executeAction(zone, 3);
+      state.count = 0;
+      state.timer = null;
+      return;
+    }
+    state.timer = setTimeout(() => {
+      executeAction(zone, state.count);
+      state.count = 0;
+      state.timer = null;
+    }, 280);
+  };
+
+  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const videoEl = e.currentTarget;
+    if (videoLimit > 0 && videoEl.currentTime > videoLimit) {
+      videoEl.pause();
+      setLimitReached(true);
+    }
+  };
 
   const getVideoMimeType = (url: string): string => {
     if (url.includes('.mov') || url.includes('MOV')) return 'video/quicktime';
@@ -128,11 +230,23 @@ export default function WatchPage() {
 
   // Fetch premium status when user changes
   useEffect(() => {
-    if (!user) { setIsPremium(false); return; }
+    if (!user) {
+      setIsPremium(false);
+      setActivePlan('free');
+      setVideoLimit(300);
+      return;
+    }
     fetch(`/api/premium/status?userId=${user.uid}`)
       .then(r => r.json())
-      .then(d => setIsPremium(d.isPremium === true))
-      .catch(() => { });
+      .then(d => {
+        setIsPremium(d.isPremium === true);
+        setActivePlan(d.plan || 'free');
+        setVideoLimit(d.videoTimeLimit || 300);
+      })
+      .catch(() => {
+        setActivePlan('free');
+        setVideoLimit(300);
+      });
   }, [user]);
 
   const handleDownload = async () => {
@@ -357,7 +471,7 @@ export default function WatchPage() {
       {/* ── Main Column ── */}
       <div className="flex-1 min-w-0">
         {/* Video Player */}
-        <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-4">
+        <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-4 group">
           {videoError && (
             <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
               <div className="text-center text-white max-w-md">
@@ -380,12 +494,14 @@ export default function WatchPage() {
             </div>
           )}
           <video
+            ref={videoRef}
             key={video.id}
             controls
             controlsList="nodownload"
             style={{ maxHeight: '500px', width: '100%' }}
             onCanPlay={() => setVideoError(null)}
             onLoadedMetadata={() => setVideoError(null)}
+            onTimeUpdate={handleTimeUpdate}
             onError={(e) => {
               const vid = e.currentTarget;
               const errorCode = vid.error?.code;
@@ -403,6 +519,63 @@ export default function WatchPage() {
             <source src={video.videoUrl} type={getVideoMimeType(video.videoUrl)} />
             Your browser does not support the video tag.
           </video>
+
+          {/* Time Limit Reached Overlay */}
+          {limitReached && (
+            <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center text-center p-6 z-30 animate-in fade-in duration-300">
+              <Crown className="w-12 h-12 text-yellow-400 mb-3 animate-bounce" />
+              <h3 className="text-xl font-bold text-white mb-2">Time Limit Reached</h3>
+              <p className="text-sm text-gray-300 max-w-sm mb-6">
+                You are on the <span className="font-bold text-violet-400 uppercase">{activePlan}</span> plan (limited to {videoLimit / 60} minutes of playback). Upgrade your subscription to watch further!
+              </p>
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={() => setShowPremiumModal(true)}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold hover:scale-105 transition shadow-lg flex items-center gap-2"
+                >
+                  <Crown className="w-4 h-4" />
+                  Upgrade Plan
+                </button>
+                <button
+                  onClick={() => router.push('/')}
+                  className="px-6 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold transition"
+                >
+                  Back to Home
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Transparent Gesture Target Overlay (covers top 80%) */}
+          <div className="absolute top-0 left-0 right-0 h-[80%] flex z-10 select-none">
+            <div
+              onClick={(e) => handleZoneTap('left', e)}
+              className="w-1/3 h-full cursor-pointer bg-transparent"
+              title="Double Tap: Rewind | Triple Tap: Comments"
+            />
+            <div
+              onClick={(e) => handleZoneTap('center', e)}
+              className="w-1/3 h-full cursor-pointer bg-transparent"
+              title="Single Tap: Play/Pause | Triple Tap: Next Video"
+            />
+            <div
+              onClick={(e) => handleZoneTap('right', e)}
+              className="w-1/3 h-full cursor-pointer bg-transparent"
+              title="Double Tap: Forward | Triple Tap: Close Site"
+            />
+          </div>
+
+          {/* Feedback Overlay */}
+          {feedback && (
+            <div
+              key={feedback.id}
+              className="absolute inset-0 flex items-center justify-center pointer-events-none z-20"
+            >
+              <div className="bg-black/80 text-white px-5 py-2.5 rounded-full text-base font-bold flex items-center gap-2 animate-gesture-pop shadow-lg border border-white/10">
+                {feedback.text}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Title */}
@@ -510,7 +683,7 @@ export default function WatchPage() {
         </div>
 
         {/* ── Comments Section ── */}
-        <div className="border-t dark:border-gray-700 pt-2">
+        <div ref={commentsRef} className="border-t dark:border-gray-700 pt-2">
           <Comments videoId={videoId} />
         </div>
       </div>
@@ -540,6 +713,40 @@ export default function WatchPage() {
           ))}
         </div>
       </div>
+
+      {/* Exit Confirmation Modal */}
+      {showExitModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center border border-gray-100 dark:border-gray-700 animate-in fade-in zoom-in duration-200">
+            <div className="text-4xl mb-3">🚪</div>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Close Website?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+              Are you sure you want to close this website and stop watching?
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => {
+                  setShowExitModal(false);
+                  showFeedback('🚪 Exiting...');
+                  setTimeout(() => {
+                    window.close();
+                    router.push('/');
+                  }, 500);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold transition"
+              >
+                Leave
+              </button>
+              <button
+                onClick={() => setShowExitModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

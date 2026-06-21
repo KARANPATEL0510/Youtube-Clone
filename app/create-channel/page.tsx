@@ -28,18 +28,29 @@ export default function CreateChannelPage() {
     checkChannel();
   }, [router, user]);
 
-  if (loading) return <div className="p-8">Loading...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 dark:from-zinc-900 dark:to-zinc-950 flex items-center justify-center p-8">
+        <div className="text-gray-900 dark:text-white flex items-center gap-2 font-medium">
+          <span className="w-5 h-5 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></span>
+          Loading...
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
-      <div className="p-8 text-center">
-        <p className="text-red-600 mb-4">Please log in to create a channel</p>
-        <button
-          onClick={() => router.push('/auth/login')}
-          className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700"
-        >
-          Log In
-        </button>
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 dark:from-zinc-900 dark:to-zinc-950 flex items-center justify-center p-8">
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-lg dark:shadow-black/50 border border-gray-100 dark:border-zinc-800 p-8 max-w-md w-full text-center">
+          <p className="text-red-600 dark:text-red-400 mb-4 font-medium">Please log in to create a channel</p>
+          <button
+            onClick={() => router.push('/auth/login')}
+            className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition"
+          >
+            Log In
+          </button>
+        </div>
       </div>
     );
   }
@@ -85,16 +96,16 @@ export default function CreateChannelPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 dark:from-zinc-900 dark:to-zinc-950 p-8">
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-4xl font-bold mb-2">Create Your Channel</h1>
-          <p className="text-gray-600 mb-8">
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-lg dark:shadow-black/50 border border-gray-100 dark:border-zinc-800 p-8">
+          <h1 className="text-4xl font-bold mb-2 text-gray-900 dark:text-white">Create Your Channel</h1>
+          <p className="text-gray-600 dark:text-zinc-400 mb-8">
             Start sharing your content with the world. Create your channel to upload videos and connect with viewers.
           </p>
 
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+            <div className="bg-red-100 dark:bg-red-950/40 border border-red-400 dark:border-red-900 text-red-700 dark:text-red-400 px-4 py-3 rounded mb-6">
               {error}
             </div>
           )}
@@ -102,7 +113,7 @@ export default function CreateChannelPage() {
           <form onSubmit={handleCreateChannel} className="space-y-6">
             {/* Channel Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
                 Channel Name *
               </label>
               <input
@@ -111,15 +122,15 @@ export default function CreateChannelPage() {
                 onChange={(e) => setChannelName(e.target.value)}
                 placeholder="My Awesome Channel"
                 disabled={creating}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition"
+                className="w-full px-4 py-3 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition"
                 maxLength={100}
               />
-              <p className="text-xs text-gray-500 mt-1">{channelName.length}/100</p>
+              <p className="text-xs text-gray-500 dark:text-zinc-500 mt-1">{channelName.length}/100</p>
             </div>
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
                 Channel Description
               </label>
               <textarea
@@ -128,16 +139,16 @@ export default function CreateChannelPage() {
                 placeholder="Tell viewers about your channel. What will you create?"
                 disabled={creating}
                 rows={5}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition resize-none"
+                className="w-full px-4 py-3 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition resize-none"
                 maxLength={500}
               />
-              <p className="text-xs text-gray-500 mt-1">{description.length}/500</p>
+              <p className="text-xs text-gray-500 dark:text-zinc-500 mt-1">{description.length}/500</p>
             </div>
 
             {/* Info Box */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h3 className="font-semibold text-blue-900 mb-2">What&apos;s Next?</h3>
-              <ul className="text-sm text-blue-800 space-y-1">
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/30 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 dark:text-blue-400 mb-2">What&apos;s Next?</h3>
+              <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
                 <li>✓ Customize your channel (profile picture, banner)</li>
                 <li>✓ Upload your first video</li>
                 <li>✓ Grow your audience</li>
@@ -148,12 +159,12 @@ export default function CreateChannelPage() {
             <button
               type="submit"
               disabled={creating || !channelName.trim()}
-              className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
+              className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-400 dark:disabled:bg-zinc-800 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
             >
               {creating ? 'Creating Channel...' : 'Create Channel'}
             </button>
 
-            <p className="text-xs text-gray-500 text-center">
+            <p className="text-xs text-gray-500 dark:text-zinc-500 text-center">
               You can always edit these details later
             </p>
           </form>
@@ -180,11 +191,11 @@ export default function CreateChannelPage() {
           ].map((feature) => (
             <div
               key={feature.title}
-              className="bg-white rounded-lg shadow p-6 text-center"
+              className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow dark:shadow-black/50 p-6 text-center"
             >
               <div className="text-4xl mb-4">{feature.icon}</div>
-              <h3 className="font-semibold text-gray-900 mb-2">{feature.title}</h3>
-              <p className="text-gray-600 text-sm">{feature.description}</p>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">{feature.title}</h3>
+              <p className="text-gray-600 dark:text-zinc-400 text-sm">{feature.description}</p>
             </div>
           ))}
         </div>

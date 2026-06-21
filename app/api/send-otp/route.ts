@@ -1,108 +1,167 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { storeOtpInDb } from '@/lib/db/otps';
 
-/**
- * POST /api/send-otp
- *
- * Body: { channel: 'email' | 'phone', target: string, otp: string }
- *
- * Uses Twilio for SMS and Nodemailer (Gmail) for email delivery.
- *
- * Required env vars:
- *   SMS:   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
- *   Email: GMAIL_USER, GMAIL_APP_PASS
- */
+const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+function generateOtpCode(): string {
+  const code = Math.floor(100000 + Math.random() * 900000);
+  return String(code);
+}
+
+// Build HTML email body
+function buildHtmlEmail(otp: string, purpose: string, senderName: string): string {
+  const isFriendRequest = purpose === 'friend-request';
+
+  const bodyHeading = isFriendRequest
+    ? `<p style="font-size:16px;color:#333;"><strong>${senderName || 'A user'}</strong> sent you a friend request on YouTube Clone!</p>
+       <p style="font-size:15px;color:#555;">Share this OTP with them so they can complete the request:</p>`
+    : `<p style="font-size:16px;color:#333;">Your verification code for YouTube Clone is:</p>`;
+
+  return `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;border:1px solid #e0e0e0;border-radius:12px;background:#ffffff;">
+      <div style="text-align:center;padding-bottom:16px;border-bottom:1px solid #f0f0f0;">
+        <h2 style="color:#ff0000;margin:0;font-size:26px;letter-spacing:-0.5px;">▶ YouTube Clone</h2>
+      </div>
+      <div style="padding:24px 0;">
+        <p style="font-size:16px;color:#333;margin:0 0 12px;">Hello,</p>
+        ${bodyHeading}
+        <div style="background:#f8f8f8;border:2px dashed #ddd;padding:20px;text-align:center;font-size:36px;font-weight:bold;letter-spacing:8px;color:#111;margin:24px 0;border-radius:10px;">
+          ${otp}
+        </div>
+        <p style="font-size:13px;color:#888;margin:0;">
+          ⏱ This code expires in <strong>5 minutes</strong>.<br/>
+          If you didn't request this, you can safely ignore this email.
+        </p>
+      </div>
+      <div style="border-top:1px solid #f0f0f0;padding-top:16px;text-align:center;">
+        <p style="font-size:11px;color:#aaa;margin:0;">© 2026 YouTube Clone. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+}
+
+async function sendEmailViaSMTP(
+  to: string,
+  subject: string,
+  html: string,
+): Promise<void> {
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT || '587');
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpFrom = process.env.SMTP_FROM || `"YouTube Clone" <${smtpUser}>`;
+
+  if (!smtpUser || !smtpPass) {
+    throw new Error('SMTP_USER and SMTP_PASS environment variables are not configured.');
+  }
+
+  // Dynamic import — required for nodemailer v8 (ESM) in serverless
+  const { createTransport } = await import('nodemailer');
+
+  const transporter = createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    // port 465 = SSL, port 587 = STARTTLS
+    secure: smtpPort === 465,
+    auth: { user: smtpUser, pass: smtpPass },
+    // Required for Gmail App Passwords in some serverless environments
+    tls: { rejectUnauthorized: true },
+    // Disable connection pool — critical for serverless functions
+    pool: false,
+    // Timeouts — keep under Vercel's 10s limit
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 8000,
+  } as any);
+
+  try {
+    const info = await transporter.sendMail({ from: smtpFrom, to, subject, html });
+    console.log(`[SMTP] ✅ Email sent to ${to} — messageId: ${info.messageId}`);
+  } finally {
+    // Always close the connection — essential in serverless environments
+    transporter.close();
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { channel, target, otp } = body as {
-      channel: 'email' | 'phone';
+    const {
+      target,
+      purpose = 'login',
+      senderName = '',
+    } = body as {
       target: string;
-      otp: string;
+      purpose?: 'login' | 'friend-request';
+      senderName?: string;
     };
 
-    if (!channel || !target || !otp) {
+    if (!target || typeof target !== 'string' || !target.includes('@')) {
       return NextResponse.json(
-        { error: 'Missing required fields: channel, target, otp' },
+        { error: 'Missing or invalid target email address' },
         { status: 400 }
       );
     }
 
-    if (channel === 'phone') {
-      // ── SMS via Twilio ───────────────────────────────────────────────────────
-      const accountSid = process.env.TWILIO_ACCOUNT_SID;
-      const authToken  = process.env.TWILIO_AUTH_TOKEN;
-      const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+    const otp = generateOtpCode();
 
-      if (!accountSid || !authToken || !fromNumber) {
-        console.error('[send-otp] Twilio env vars not configured');
-        return NextResponse.json(
-          { error: 'SMS service not configured. Please contact support.' },
-          { status: 503 }
-        );
-      }
+    // 1. Store OTP in Firestore first
+    await storeOtpInDb(target.toLowerCase().trim(), otp, OTP_EXPIRY_MS);
 
-      const twilio = (await import('twilio')).default;
-      const client = twilio(accountSid, authToken);
+    console.log(`[OTP] Generated for ${target} (purpose: ${purpose}) — code: ${otp}`);
 
-      await client.messages.create({
-        body: `Your YouTube Clone OTP is: ${otp}. It expires in 5 minutes. Do not share this code.`,
-        from: fromNumber,
-        to: target,
-      });
+    // 2. Send via SMTP
+    const isFriendRequest = purpose === 'friend-request';
+    const subject = isFriendRequest
+      ? `${senderName || 'Someone'} wants to be your friend on YouTube Clone`
+      : 'YouTube Clone — Your Verification Code';
 
-      console.log(`[send-otp] SMS OTP sent to ${target}`);
+    const html = buildHtmlEmail(otp, purpose, senderName);
 
-    } else if (channel === 'email') {
-      // ── Email via Nodemailer (Gmail) ─────────────────────────────────────────
-      const gmailUser = process.env.GMAIL_USER;
-      const gmailPass = process.env.GMAIL_APP_PASS;
-
-      if (!gmailUser || !gmailPass) {
-        console.error('[send-otp] Gmail env vars not configured');
-        return NextResponse.json(
-          { error: 'Email service not configured. Please contact support.' },
-          { status: 503 }
-        );
-      }
-
-      const nodemailer = (await import('nodemailer')).default;
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: gmailUser, pass: gmailPass },
-      });
-
-      await transporter.sendMail({
-        from: `"YouTube Clone" <${gmailUser}>`,
-        to: target,
-        subject: 'Your OTP Code — YouTube Clone',
-        html: `
-          <div style="font-family:sans-serif;max-width:420px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
-            <h2 style="color:#ef4444;margin:0 0 8px">YouTube Clone</h2>
-            <p style="color:#374151;margin-bottom:16px">Your one-time password is:</p>
-            <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#111827;text-align:center;padding:16px;background:#f9fafb;border-radius:8px">
-              ${otp}
-            </div>
-            <p style="color:#6b7280;font-size:13px;margin-top:16px">
-              This code expires in <strong>5 minutes</strong>. Do not share it with anyone.
-            </p>
-          </div>
-        `,
-      });
-
-      console.log(`[send-otp] Email OTP sent to ${target}`);
-
-    } else {
-      return NextResponse.json(
-        { error: 'Invalid channel. Must be "email" or "phone".' },
-        { status: 400 }
-      );
-    }
+    await sendEmailViaSMTP(target.toLowerCase().trim(), subject, html);
 
     return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error('[send-otp] Error:', err);
+
+  } catch (error: any) {
+    const message: string = error?.message || 'Unknown error';
+
+    // Classify the error for the client
+    if (
+      message.includes('SMTP_USER') ||
+      message.includes('SMTP_PASS') ||
+      message.includes('environment variable')
+    ) {
+      console.error('[OTP] ❌ SMTP not configured:', message);
+      return NextResponse.json(
+        { error: 'Email service is not configured. Please contact the administrator.' },
+        { status: 503 }
+      );
+    }
+
+    if (
+      message.includes('Invalid login') ||
+      message.includes('Username and Password') ||
+      message.includes('535')
+    ) {
+      console.error('[OTP] ❌ Gmail authentication failed:', message);
+      return NextResponse.json(
+        { error: 'Email authentication failed. Check SMTP credentials.' },
+        { status: 502 }
+      );
+    }
+
+    if (message.includes('550') || message.includes('recipient')) {
+      console.error('[OTP] ❌ Invalid recipient address:', message);
+      return NextResponse.json(
+        { error: 'Could not deliver email — recipient address may be invalid.' },
+        { status: 400 }
+      );
+    }
+
+    // Generic SMTP / DB failure
+    console.error('[OTP] ❌ Failed to send OTP:', message);
     return NextResponse.json(
-      { error: 'Failed to send OTP. Please try again.' },
+      { error: `Failed to send OTP: ${message}` },
       { status: 500 }
     );
   }
