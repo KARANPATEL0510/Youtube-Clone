@@ -244,6 +244,9 @@ export default function RoomPage() {
         );
         setHasJoined(true);
         setRoomLoading(false);
+
+        // Auto-open share modal for creator so they can invite friends immediately
+        if (creator) setIsShareOpen(true);
       } catch (err) {
         setRoomError('Failed to join room. Please try again.');
         setRoomLoading(false);
