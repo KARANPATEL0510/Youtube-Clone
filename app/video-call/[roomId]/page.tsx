@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useWebRTC } from '@/lib/hooks/useWebRTC';
 import {
+  getRoomById,
   joinRoom,
   leaveRoom,
   subscribeRoom,
@@ -223,16 +224,14 @@ export default function RoomPage() {
 
     async function init() {
       try {
-        // Validate room
-        const res = await fetch(`/api/rooms?roomId=${roomId}`);
-        if (!res.ok) {
-          const data = await res.json();
-          setRoomError(data.error || 'Room not found');
+        // Validate room directly via client-side Firestore
+        const roomData = await getRoomById(roomId);
+        if (!roomData) {
+          setRoomError('This meeting does not exist or has expired.');
           setRoomLoading(false);
           return;
         }
-        const data = await res.json();
-        const creator = data.createdBy === user!.uid;
+        const creator = roomData.createdBy === user!.uid;
         setIsCreator(creator);
 
         // Join room (add participant)
@@ -248,6 +247,7 @@ export default function RoomPage() {
         // Auto-open share modal for creator so they can invite friends immediately
         if (creator) setIsShareOpen(true);
       } catch (err) {
+        console.error('[Room] init error:', err);
         setRoomError('Failed to join room. Please try again.');
         setRoomLoading(false);
       }
