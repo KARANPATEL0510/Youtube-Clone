@@ -39,7 +39,7 @@ export interface Friendship {
 /** Search user by email */
 export const searchUserByEmail = async (email: string): Promise<FriendProfile | null> => {
   try {
-    const q = query(collection(getFirebaseDb(), 'users'), where('email', '==', email.trim()));
+    const q = query(collection(getFirebaseDb(), 'users'), where('email', '==', email.toLowerCase().trim()));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
     const userDoc = querySnapshot.docs[0];

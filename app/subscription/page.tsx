@@ -8,7 +8,11 @@ import { Crown, Lock, Play, Star, Zap, Shield, Loader2, X, Check } from 'lucide-
 import PremiumModal from '@/components/premium-modal';
 import { getAllVideos, Video as FirestoreVideo } from '@/lib/db/videos';
 
-const DEFAULT_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+const SAMPLE_VIDEO_URLS = [
+  'https://www.w3schools.com/html/mov_bbb.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+];
 
 interface PremiumVideo {
   id: string;
@@ -29,6 +33,7 @@ const SAMPLE_PREMIUM = [
     thumbnailUrl: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=400&h=225&fit=crop',
     category: 'Film & Animation',
     views: 84200,
+    videoUrl: SAMPLE_VIDEO_URLS[0],
   },
   {
     id: 'premium-2',
@@ -36,6 +41,7 @@ const SAMPLE_PREMIUM = [
     thumbnailUrl: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=400&h=225&fit=crop',
     category: 'Music',
     views: 63000,
+    videoUrl: SAMPLE_VIDEO_URLS[1],
   },
   {
     id: 'premium-3',
@@ -43,6 +49,7 @@ const SAMPLE_PREMIUM = [
     thumbnailUrl: 'https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=400&h=225&fit=crop',
     category: 'Science & Technology',
     views: 120500,
+    videoUrl: SAMPLE_VIDEO_URLS[2],
   },
 ];
 
@@ -250,7 +257,7 @@ export default function SubscriptionPage() {
             <div
               key={video.id}
               className="rounded-2xl overflow-hidden bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 hover:border-violet-300 dark:hover:border-violet-700 transition shadow-sm group cursor-pointer"
-              onClick={() => setSelectedVideo({ title: video.title, videoUrl: DEFAULT_VIDEO_URL })}
+              onClick={() => setSelectedVideo({ title: video.title, videoUrl: video.videoUrl })}
             >
               <div className="relative aspect-video bg-gray-200 dark:bg-gray-800">
                 <Image src={video.thumbnailUrl} alt={video.title} fill className="object-cover" />

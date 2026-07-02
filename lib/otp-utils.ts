@@ -10,7 +10,7 @@ export async function sendOtp(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      target,
+      target: target.toLowerCase().trim(),
       purpose: options?.purpose ?? 'login',
       senderName: options?.senderName ?? '',
     }),
@@ -28,7 +28,7 @@ export async function verifyOtpOnServer(target: string, otp: string): Promise<bo
   const res = await fetch('/api/verify-otp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target, otp }),
+    body: JSON.stringify({ target: target.toLowerCase().trim(), otp }),
   });
 
   if (!res.ok) {

@@ -31,7 +31,7 @@ export const createUserProfile = async (
     const userRef = doc(getFirebaseDb(), 'users', uid);
     await setDoc(userRef, {
       uid,
-      email,
+      email: email.toLowerCase().trim(), // normalise so searches are case-insensitive
       displayName,
       photoURL: photoURL || '',
       phone: phone || '',

@@ -103,11 +103,13 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      // Register with Firebase Auth
-      const user = await registerUser(email, password);
+      const normalizedEmail = email.toLowerCase().trim();
 
-      // Create Firestore profile (with optional phone)
-      await createUserProfile(user.uid, email, displayName, undefined, phone || undefined);
+      // Register with Firebase Auth
+      const user = await registerUser(normalizedEmail, password);
+
+      // Create Firestore profile (with phone) — always store lowercase email
+      await createUserProfile(user.uid, normalizedEmail, displayName, undefined, phone || undefined);
 
       router.push('/');
     } catch (err) {
