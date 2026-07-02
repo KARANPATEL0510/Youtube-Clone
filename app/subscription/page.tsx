@@ -134,7 +134,7 @@ export default function SubscriptionPage() {
   }
 
   return (
-    <div className="flex-1 p-8">
+    <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {showModal && user && (
         <PremiumModal
           userId={user.uid}
@@ -181,7 +181,7 @@ export default function SubscriptionPage() {
       </div>
 
       {/* Dashboard Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-10">
         
         {/* Active Plan Detail Card */}
         <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
@@ -218,7 +218,7 @@ export default function SubscriptionPage() {
         </div>
 
         {/* Informative Perks Guide Card */}
-        <div className="lg:col-span-2 bg-gradient-to-br from-violet-900 via-purple-800 to-fuchsia-950 rounded-3xl p-8 text-white relative overflow-hidden flex flex-col justify-between">
+        <div className="xl:col-span-2 bg-gradient-to-br from-violet-900 via-purple-800 to-fuchsia-950 rounded-3xl p-6 text-white relative overflow-hidden flex flex-col justify-between">
           <div className="absolute top-0 right-0 w-80 h-80 bg-white/5 rounded-full blur-3xl pointer-events-none" />
           <div>
             <h2 className="text-3xl font-black mb-3">Seamless Upgrades</h2>
@@ -252,7 +252,7 @@ export default function SubscriptionPage() {
         </h2>
 
         {/* Hardcoded Sample Teaser Videos */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
           {SAMPLE_PREMIUM.map((video) => (
             <div
               key={video.id}
