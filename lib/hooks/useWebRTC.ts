@@ -30,6 +30,7 @@ export interface WebRTCState {
   isScreenSharing: boolean;
   isRecording: boolean;
   connectionState: string;
+  screenShareError: string | null;
   mediaError: string | null;
   toggleMic: () => void;
   toggleCamera: () => void;
@@ -302,7 +303,15 @@ export function useWebRTC(
     }
   }, []);
 
+  const [screenShareError, setScreenShareError] = useState<string | null>(null);
+
   const startScreenShare = useCallback(async () => {
+    // Mobile browsers do not support getDisplayMedia
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setScreenShareError('Screen sharing is not supported on mobile browsers.');
+      setTimeout(() => setScreenShareError(null), 4000);
+      return;
+    }
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       screenStreamRef.current = screenStream;
@@ -321,10 +330,17 @@ export function useWebRTC(
       setIsScreenSharing(true);
 
       videoTrack.onended = () => stopScreenShare();
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name !== 'NotAllowedError') {
+        // User cancelled is fine, but other errors surface
+        setScreenShareError('Could not start screen sharing.');
+        setTimeout(() => setScreenShareError(null), 4000);
+      }
       console.error('[WebRTC] Screen share error:', err);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   const stopScreenShare = useCallback(async () => {
     screenStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -432,6 +448,7 @@ export function useWebRTC(
     isScreenSharing,
     isRecording,
     connectionState,
+    screenShareError,
     mediaError,
     toggleMic,
     toggleCamera,

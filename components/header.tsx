@@ -7,12 +7,14 @@ import Image from "next/image";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { logoutUser } from "@/lib/db/auth";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSidebar } from "@/lib/contexts/sidebar-context";
 
 function HeaderInner() {
   const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
   const { user, userProfile, loading } = useAuth();
   const router = useRouter();
+  const { toggle } = useSidebar();
 
   // Keep the input in sync when the URL query changes (e.g. back/forward)
   useEffect(() => {
@@ -40,7 +42,12 @@ function HeaderInner() {
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between px-4 py-2 bg-white border-b dark:bg-black dark:border-gray-800">
       <div className="flex items-center gap-4">
-        <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition">
+        {/* Hamburger — toggles sidebar on all screen sizes */}
+        <button
+          onClick={toggle}
+          aria-label="Toggle menu"
+          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition"
+        >
           <Menu className="w-6 h-6" />
         </button>
         <Link href="/" className="flex items-center gap-1">

@@ -291,7 +291,7 @@ export default function RoomPage() {
     localStream, remoteStream,
     isMicEnabled, isCameraEnabled,
     isScreenSharing, isRecording,
-    connectionState, mediaError,
+    connectionState, mediaError, screenShareError,
     toggleMic, toggleCamera,
     startScreenShare, stopScreenShare,
     startRecording, stopRecording,
@@ -685,6 +685,15 @@ export default function RoomPage() {
 
       {/* ── Share modal ── */}
       {isShareOpen && <ShareModal roomId={roomId} onClose={() => setIsShareOpen(false)} />}
+
+      {/* ── Screen share unsupported toast ── */}
+      {screenShareError && (
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-5 py-3 rounded-2xl text-white text-sm font-medium shadow-2xl animate-bounce"
+          style={{ background: 'rgba(239,68,68,0.95)', backdropFilter: 'blur(8px)' }}>
+          <MonitorOff className="w-4 h-4 flex-shrink-0" />
+          {screenShareError}
+        </div>
+      )}
     </div>
   );
 }
