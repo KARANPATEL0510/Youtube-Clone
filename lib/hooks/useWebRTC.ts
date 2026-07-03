@@ -96,24 +96,40 @@ export function useWebRTC(
     };
   }, [isReady]);
 
+  // ICE candidate queue — buffers candidates until remoteDescription is set
+  const iceCandidateQueueRef = useRef<RTCIceCandidateInit[]>([]);
+  // Prevent concurrent renegotiation
+  const isNegotiatingRef = useRef(false);
+
   // ── Build peer connection once we have media ───────────────────────────────
   useEffect(() => {
     if (!isReady || !localStream || !roomId) return;
 
     const pc = new RTCPeerConnection(RTC_CONFIG);
     pcRef.current = pc;
+    iceCandidateQueueRef.current = [];
 
     // Add local tracks
     localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
-    // Receive remote tracks
+    // ── Receive remote tracks (handles initial + screen-share replacements) ──
     const remoteMediaStream = new MediaStream();
     setRemoteStream(remoteMediaStream);
+
     pc.ontrack = (event) => {
-      event.streams[0]?.getTracks().forEach((track) => remoteMediaStream.addTrack(track));
+      const incomingTrack = event.track;
+      // Remove any existing track of the same kind before adding the new one
+      remoteMediaStream.getTracks().forEach((existing) => {
+        if (existing.kind === incomingTrack.kind) {
+          remoteMediaStream.removeTrack(existing);
+        }
+      });
+      remoteMediaStream.addTrack(incomingTrack);
+      // Trigger React re-render so the remote video element picks up the change
+      setRemoteStream(new MediaStream(remoteMediaStream.getTracks()));
     };
 
-    // Connection state
+    // ── Connection state ───────────────────────────────────────────────────
     pc.onconnectionstatechange = () => {
       setConnectionState(pc.connectionState);
       console.log('[WebRTC] Connection state:', pc.connectionState);
@@ -123,41 +139,82 @@ export function useWebRTC(
       console.log('[WebRTC] ICE state:', pc.iceConnectionState);
     };
 
-    // ── CREATOR: watch for callee joining, then create offer ──────────────
+    // ── Helper: safely add ICE candidate (queue if remoteDescription not set) ──
+    const safeAddCandidate = async (candidate: RTCIceCandidateInit) => {
+      if (pc.remoteDescription) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          console.warn('[WebRTC] addIceCandidate error:', err);
+        }
+      } else {
+        iceCandidateQueueRef.current.push(candidate);
+      }
+    };
+
+    // ── Helper: drain queued ICE candidates after setRemoteDescription ─────
+    const drainICEQueue = async () => {
+      const queue = [...iceCandidateQueueRef.current];
+      iceCandidateQueueRef.current = [];
+      for (const c of queue) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(c));
+        } catch (err) {
+          console.warn('[WebRTC] Drain candidate error:', err);
+        }
+      }
+    };
+
+    // ── CREATOR side ───────────────────────────────────────────────────────
     if (isCreator) {
+      // ICE collection for creator
+      pc.onicecandidate = async (event) => {
+        if (event.candidate) {
+          await addCallerCandidate(roomId, event.candidate.toJSON());
+        }
+      };
+
+      // Renegotiation (fires when screen share replaces a track)
+      pc.onnegotiationneeded = async () => {
+        if (isNegotiatingRef.current) return;
+        isNegotiatingRef.current = true;
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          await storeOffer(roomId, offer);
+          console.log('[WebRTC] Creator renegotiated offer');
+        } catch (err) {
+          console.error('[WebRTC] Renegotiation error:', err);
+        } finally {
+          isNegotiatingRef.current = false;
+        }
+      };
+
       const unsubRoom = subscribeRoom(roomId, async (room: Room | null) => {
-        if (!room || offerCreatedRef.current) return;
+        if (!room) return;
         const participantCount = Object.keys(room.participants || {}).length;
 
-        if (participantCount >= 2) {
+        // Create initial offer when callee joins
+        if (participantCount >= 2 && !offerCreatedRef.current) {
           offerCreatedRef.current = true;
-
-          // Collect ICE candidates
-          pc.onicecandidate = async (event) => {
-            if (event.candidate) {
-              await addCallerCandidate(roomId, event.candidate.toJSON());
-            }
-          };
-
           try {
             setConnectionState('connecting');
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             await storeOffer(roomId, offer);
-            console.log('[WebRTC] Creator stored offer');
+            console.log('[WebRTC] Creator stored initial offer');
           } catch (err) {
-            console.error('[WebRTC] Error creating offer:', err);
+            console.error('[WebRTC] Error creating initial offer:', err);
           }
         }
 
-        // Watch for callee's answer
+        // Accept callee's answer
         if (room.answer && pc.signalingState === 'have-local-offer') {
           try {
-            const answer = new RTCSessionDescription({
-              type: room.answer.type as RTCSdpType,
-              sdp: room.answer.sdp,
-            });
-            await pc.setRemoteDescription(answer);
+            await pc.setRemoteDescription(
+              new RTCSessionDescription({ type: room.answer.type as RTCSdpType, sdp: room.answer.sdp })
+            );
+            await drainICEQueue();
             console.log('[WebRTC] Creator set remote answer');
           } catch (err) {
             console.error('[WebRTC] Error setting answer:', err);
@@ -166,56 +223,50 @@ export function useWebRTC(
       });
       unsubs.current.push(unsubRoom);
 
-      // Listen for callee's ICE candidates
+      // Receive callee's ICE candidates
       const unsubCandidates = subscribeCalleeCandidates(roomId, async (candidate) => {
-        try {
-          if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-          console.error('[WebRTC] Error adding callee ICE:', err);
-        }
+        await safeAddCandidate(candidate);
       });
       unsubs.current.push(unsubCandidates);
     }
 
-    // ── CALLEE: watch for offer, then create answer ───────────────────────
+    // ── CALLEE side ───────────────────────────────────────────────────────
     if (!isCreator) {
+      // ICE collection for callee
+      pc.onicecandidate = async (event) => {
+        if (event.candidate) {
+          await addCalleeCandidate(roomId, event.candidate.toJSON());
+        }
+      };
+
       const unsubRoom = subscribeRoom(roomId, async (room: Room | null) => {
-        if (!room || answerCreatedRef.current) return;
-        if (!room.offer) return;
+        if (!room || !room.offer) return;
 
-        answerCreatedRef.current = true;
+        // Handle new offer (initial connection or renegotiation from creator)
+        const offerSdp = room.offer.sdp;
+        const currentRemote = pc.remoteDescription?.sdp;
 
-        // Collect ICE candidates
-        pc.onicecandidate = async (event) => {
-          if (event.candidate) {
-            await addCalleeCandidate(roomId, event.candidate.toJSON());
+        if (offerSdp !== currentRemote) {
+          try {
+            setConnectionState('connecting');
+            await pc.setRemoteDescription(
+              new RTCSessionDescription({ type: room.offer.type as RTCSdpType, sdp: room.offer.sdp })
+            );
+            await drainICEQueue();
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            await storeAnswer(roomId, answer);
+            console.log('[WebRTC] Callee answered offer');
+          } catch (err) {
+            console.error('[WebRTC] Error creating answer:', err);
           }
-        };
-
-        try {
-          setConnectionState('connecting');
-          const offer = new RTCSessionDescription({
-            type: room.offer.type as RTCSdpType,
-            sdp: room.offer.sdp,
-          });
-          await pc.setRemoteDescription(offer);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          await storeAnswer(roomId, answer);
-          console.log('[WebRTC] Callee stored answer');
-        } catch (err) {
-          console.error('[WebRTC] Error creating answer:', err);
         }
       });
       unsubs.current.push(unsubRoom);
 
-      // Listen for caller's ICE candidates
+      // Receive caller's ICE candidates
       const unsubCandidates = subscribeCallerCandidates(roomId, async (candidate) => {
-        try {
-          if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-          console.error('[WebRTC] Error adding caller ICE:', err);
-        }
+        await safeAddCandidate(candidate);
       });
       unsubs.current.push(unsubCandidates);
     }
@@ -225,11 +276,14 @@ export function useWebRTC(
       pcRef.current = null;
       offerCreatedRef.current = false;
       answerCreatedRef.current = false;
+      isNegotiatingRef.current = false;
+      iceCandidateQueueRef.current = [];
       unsubs.current.forEach((u) => u());
       unsubs.current = [];
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, localStream, roomId, isCreator]);
+
 
   // ── Controls ──────────────────────────────────────────────────────────────
   const toggleMic = useCallback(() => {

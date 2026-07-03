@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { createRoom } from '@/lib/db/rooms';
+import { createRoom, getRoomById } from '@/lib/db/rooms';
 import { Video, Link2, ArrowRight, Loader2, Shield, Users, Zap } from 'lucide-react';
 
 export default function VideoCallLobbyPage() {
@@ -40,16 +40,16 @@ export default function VideoCallLobbyPage() {
     setIsJoining(true);
     setJoinError(null);
     try {
-      const res = await fetch(`/api/rooms?roomId=${id}`);
-      if (!res.ok) {
-        const data = await res.json();
-        setJoinError(data.error || 'Room not found');
+      // Validate room directly via client-side Firestore (avoids server-side SDK issues)
+      const room = await getRoomById(id);
+      if (!room) {
+        setJoinError('Room not found or has already ended. Check the code and try again.');
         setIsJoining(false);
         return;
       }
       router.push(`/video-call/${id}`);
     } catch {
-      setJoinError('Failed to join room. Please try again.');
+      setJoinError('Failed to validate room. Check your connection and try again.');
       setIsJoining(false);
     }
   };
