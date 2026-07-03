@@ -54,12 +54,11 @@ export default function Sidebar() {
           w-64 flex-shrink-0 overflow-y-auto
           bg-white dark:bg-black border-r border-gray-200 dark:border-gray-800
           transition-transform duration-300 ease-in-out
-          md:sticky md:translate-x-0 md:z-40
           ${isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}
         `}
       >
         {/* Close button — mobile only */}
-        <div className="flex items-center justify-between px-4 py-3 md:hidden border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
           <span className="font-semibold text-sm dark:text-white">Menu</span>
           <button
             onClick={close}
