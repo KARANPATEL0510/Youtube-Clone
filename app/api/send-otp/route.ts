@@ -8,6 +8,16 @@ function generateOtpCode(): string {
   return String(code);
 }
 
+/** True when target looks like an email address */
+function isEmail(target: string): boolean {
+  return target.includes('@');
+}
+
+/** True when target looks like a phone number (digits, spaces, +, -, parens) */
+function isPhone(target: string): boolean {
+  return /^[\+\d][\d\s\-().]{5,}$/.test(target.trim());
+}
+
 // Build HTML email body
 function buildHtmlEmail(otp: string, purpose: string, senderName: string): string {
   const isFriendRequest = purpose === 'friend-request';
@@ -96,29 +106,45 @@ export async function POST(req: NextRequest) {
       senderName?: string;
     };
 
-    if (!target || typeof target !== 'string' || !target.includes('@')) {
+    const cleanTarget = (target ?? '').toString().trim();
+
+    if (!cleanTarget || (!isEmail(cleanTarget) && !isPhone(cleanTarget))) {
       return NextResponse.json(
-        { error: 'Missing or invalid target email address' },
+        { error: 'Missing or invalid target. Must be an email address or phone number.' },
         { status: 400 }
       );
     }
 
     const otp = generateOtpCode();
 
-    // 1. Store OTP in Firestore first
-    await storeOtpInDb(target.toLowerCase().trim(), otp, OTP_EXPIRY_MS);
+    // Store OTP in Firestore (keyed by normalised target)
+    await storeOtpInDb(cleanTarget.toLowerCase(), otp, OTP_EXPIRY_MS);
 
-    console.log(`[OTP] Generated for ${target} (purpose: ${purpose}) — code: ${otp}`);
+    console.log(`[OTP] Generated for ${cleanTarget} (purpose: ${purpose}) — code: ${otp}`);
 
-    // 2. Send via SMTP
-    const isFriendRequest = purpose === 'friend-request';
-    const subject = isFriendRequest
-      ? `${senderName || 'Someone'} wants to be your friend on YouTube Clone`
-      : 'YouTube Clone — Your Verification Code';
-
-    const html = buildHtmlEmail(otp, purpose, senderName);
-
-    await sendEmailViaSMTP(target.toLowerCase().trim(), subject, html);
+    // ── Route by target type ──
+    if (isEmail(cleanTarget)) {
+      // Email path — send via SMTP
+      const isFriendRequest = purpose === 'friend-request';
+      const subject = isFriendRequest
+        ? `${senderName || 'Someone'} wants to be your friend on YouTube Clone`
+        : 'YouTube Clone — Your Verification Code';
+      const html = buildHtmlEmail(otp, purpose, senderName);
+      await sendEmailViaSMTP(cleanTarget.toLowerCase(), subject, html);
+      console.log(`[OTP] ✅ Email OTP dispatched to ${cleanTarget}`);
+    } else {
+      // Phone / SMS path — OTP is stored; log it clearly for development.
+      // In production, replace the block below with your SMS provider (Twilio, MSG91, etc.).
+      console.log(`
+┌────────────────────────────────────────────────────┐
+│  📱 SMS OTP (Development Mode)                │
+│  Target : ${cleanTarget.padEnd(38)}│
+│  OTP    : ${otp.padEnd(38)}│
+│  Expiry : 5 minutes                            │
+│  Note   : Wire a real SMS provider (Twilio /   │
+│           MSG91) in production.                │
+└────────────────────────────────────────────────────┘`);
+    }
 
     return NextResponse.json({ success: true });
 

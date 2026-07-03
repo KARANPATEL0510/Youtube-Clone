@@ -2,16 +2,22 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { 
-  ThumbsUp, 
-  ThumbsDown, 
-  Share2, 
-  Download, 
+import { useRouter } from "next/navigation";
+import {
+  ThumbsUp,
+  ThumbsDown,
+  Share2,
+  Download,
   MoreHorizontal,
   Bell,
   Check,
-  X
+  X,
+  Loader2,
+  Crown,
+  AlertTriangle,
 } from "lucide-react";
+import { useAuth } from "@/lib/contexts/auth-context";
+import PremiumModal from "@/components/premium-modal";
 
 interface VideoInfoProps {
   video: {
@@ -25,10 +31,16 @@ interface VideoInfoProps {
     description: string;
     likes: string;
     dislikes: string;
+    // Download-related (optional — for wiring to /api/downloads)
+    videoUrl?: string;
+    thumbnailUrl?: string;
+    authorId?: string;
   };
 }
 
 const VideoInfo = ({ video }: VideoInfoProps) => {
+  const router = useRouter();
+  const { user } = useAuth();
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
@@ -38,6 +50,14 @@ const VideoInfo = ({ video }: VideoInfoProps) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showNotification, setShowNotification] = useState<{message: string; type: string} | null>(null);
+
+  // Download state
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [downloadLimitReached, setDownloadLimitReached] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
 
   const showTempNotification = (message: string, type: string = "success") => {
     setShowNotification({ message, type });
@@ -115,9 +135,73 @@ const VideoInfo = ({ video }: VideoInfoProps) => {
     setShowShareMenu(false);
   };
 
-  const handleDownload = (quality: string) => {
+  const handleDownload = async () => {
+    // Must be signed in
+    if (!user) {
+      router.push("/auth");
+      showTempNotification("Please sign in to download videos", "error");
+      return;
+    }
+    // Need a videoUrl to download
+    if (!video.videoUrl) {
+      showTempNotification("No downloadable file available for this video", "error");
+      return;
+    }
+
+    setDownloadLoading(true);
+    setDownloadLimitReached(false);
+    setDownloadError(null);
     setShowDownloadMenu(false);
-    showTempNotification(`Downloading ${quality}... (Demo)`, "info");
+
+    try {
+      // POST to /api/downloads — checks daily limit + premium status
+      const res = await fetch("/api/downloads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.uid,
+          videoId: video.id,
+          videoTitle: video.title,
+          videoUrl: video.videoUrl,
+          thumbnailUrl: video.thumbnailUrl || "",
+          channelName: video.channel,
+        }),
+      });
+
+      const data = await res.json();
+
+      // Free user hit daily limit → open Premium modal
+      if (res.status === 429 && data.error === "daily_limit_reached") {
+        setDownloadLimitReached(true);
+        setShowPremiumModal(true);
+        showTempNotification(
+          "Daily download limit reached. Upgrade to Premium for unlimited downloads!",
+          "error"
+        );
+        return;
+      }
+
+      if (!res.ok) throw new Error(data.error || "Download failed");
+
+      // Trigger real browser file download
+      const a = document.createElement("a");
+      a.href = video.videoUrl!;
+      a.download = video.title || "video";
+      a.target = "_blank";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 3000);
+      showTempNotification("Download started! Saved to Downloads section.", "success");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Download failed";
+      setDownloadError(msg);
+      showTempNotification(msg, "error");
+    } finally {
+      setDownloadLoading(false);
+    }
   };
 
   const handleSaveToWatchLater = () => {
@@ -143,6 +227,15 @@ const VideoInfo = ({ video }: VideoInfoProps) => {
 
   return (
     <div className="mt-4">
+      {/* Premium Modal — shown when daily limit is reached */}
+      {showPremiumModal && user && (
+        <PremiumModal
+          userId={user.uid}
+          onClose={() => { setShowPremiumModal(false); setDownloadLimitReached(false); }}
+          onSuccess={() => { setIsPremium(true); setDownloadLimitReached(false); }}
+        />
+      )}
+
       {/* Notification Toast */}
       {showNotification && (
         <div className="fixed top-20 right-4 z-50 animate-slide-in">
@@ -263,27 +356,52 @@ const VideoInfo = ({ video }: VideoInfoProps) => {
             )}
           </div>
 
-          {/* Download Button */}
-          <div className="relative">
-            <button
-              onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-              className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-            >
+          {/* Download Button — wired to /api/downloads */}
+          <button
+            onClick={handleDownload}
+            disabled={downloadLoading}
+            title={
+              !user
+                ? "Sign in to download"
+                : downloadLimitReached
+                ? "Daily limit reached — upgrade to Premium"
+                : isPremium
+                ? "Download video (Premium — unlimited)"
+                : "Download video (Free: 1 per day)"
+            }
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full transition disabled:opacity-60 font-medium ${
+              downloadSuccess
+                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                : downloadLimitReached
+                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+                : downloadError
+                ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
+            }`}
+          >
+            {downloadLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : downloadSuccess ? (
+              <Check className="w-5 h-5" />
+            ) : downloadLimitReached ? (
+              <Crown className="w-5 h-5" />
+            ) : downloadError ? (
+              <AlertTriangle className="w-5 h-5" />
+            ) : (
               <Download className="w-5 h-5" />
-              <span className="hidden sm:inline">Download</span>
-            </button>
-            
-            {showDownloadMenu && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowDownloadMenu(false)} />
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20">
-                  <button onClick={() => handleDownload("1080p")} className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg transition">1080p (HD)</button>
-                  <button onClick={() => handleDownload("720p")} className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition">720p (HD)</button>
-                  <button onClick={() => handleDownload("480p")} className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg transition">480p (SD)</button>
-                </div>
-              </>
             )}
-          </div>
+            <span className="hidden sm:inline">
+              {downloadLoading
+                ? "Downloading…"
+                : downloadSuccess
+                ? "Saved!"
+                : downloadLimitReached
+                ? "Go Premium"
+                : downloadError
+                ? "Retry"
+                : "Download"}
+            </span>
+          </button>
 
           {/* More Options */}
           <div className="relative">

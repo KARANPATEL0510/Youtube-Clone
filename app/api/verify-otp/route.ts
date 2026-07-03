@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isValid = await verifyOtpInDb(target, otp.trim());
+    const isValid = await verifyOtpInDb(target.toLowerCase().trim(), otp.trim());
 
     if (!isValid) {
       return NextResponse.json(

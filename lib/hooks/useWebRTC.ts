@@ -28,12 +28,15 @@ export interface WebRTCState {
   isMicEnabled: boolean;
   isCameraEnabled: boolean;
   isScreenSharing: boolean;
+  isRecording: boolean;
   connectionState: string;
   mediaError: string | null;
   toggleMic: () => void;
   toggleCamera: () => void;
   startScreenShare: () => Promise<void>;
   stopScreenShare: () => void;
+  startRecording: () => void;
+  stopRecording: () => void;
   cleanup: () => void;
 }
 
@@ -48,11 +51,14 @@ export function useWebRTC(
   const [isMicEnabled, setIsMicEnabled] = useState(true);
   const [isCameraEnabled, setIsCameraEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [connectionState, setConnectionState] = useState('idle');
   const [mediaError, setMediaError] = useState<string | null>(null);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const offerCreatedRef = useRef(false);
   const answerCreatedRef = useRef(false);
@@ -291,7 +297,68 @@ export function useWebRTC(
     setIsScreenSharing(false);
   }, []);
 
+  // ── Recording ─────────────────────────────────────────────────────────────
+  const startRecording = useCallback(() => {
+    const stream = localStreamRef.current;
+    if (!stream) {
+      console.warn('[Recording] No local stream available yet.');
+      return;
+    }
+    if (mediaRecorderRef.current?.state === 'recording') return;
+
+    // Pick the best supported MIME type
+    const mimeType = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm',
+    ].find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
+
+    recordedChunksRef.current = [];
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        recordedChunksRef.current.push(e.data);
+      }
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(recordedChunksRef.current, { type: mimeType || 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}`;
+      a.href = url;
+      a.download = `call-recording-${timestamp}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      recordedChunksRef.current = [];
+      console.log('[Recording] ✅ Recording saved to device');
+    };
+
+    recorder.start(1000); // collect a chunk every second
+    mediaRecorderRef.current = recorder;
+    setIsRecording(true);
+    console.log('[Recording] 🔴 Recording started');
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+    console.log('[Recording] ⏹ Recording stopped');
+  }, []);
+
   const cleanup = useCallback(() => {
+    // Stop recording if active
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     pcRef.current?.close();
@@ -299,6 +366,7 @@ export function useWebRTC(
     unsubs.current = [];
     setLocalStream(null);
     setRemoteStream(null);
+    setIsRecording(false);
     setConnectionState('idle');
   }, []);
 
@@ -308,12 +376,15 @@ export function useWebRTC(
     isMicEnabled,
     isCameraEnabled,
     isScreenSharing,
+    isRecording,
     connectionState,
     mediaError,
     toggleMic,
     toggleCamera,
     startScreenShare,
     stopScreenShare,
+    startRecording,
+    stopRecording,
     cleanup,
   };
 }

@@ -73,7 +73,7 @@ type Step = 'credentials' | 'otp';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { theme, locationLoading, detectedState } = useThemeLocation();
+  const { theme, locationLoading, detectedState, isSouthIndia } = useThemeLocation();
 
   // Step 1 state
   const [email, setEmail] = useState('');
@@ -84,6 +84,8 @@ export default function LoginPage() {
   const [step, setStep] = useState<Step>('credentials');
   const [otpValue, setOtpValue] = useState('');
   const [otpTarget, setOtpTarget] = useState('');
+  // 'email' = South India users | 'phone' = all other states
+  const [otpChannel, setOtpChannel] = useState<'email' | 'phone'>('email');
   const [otpSent, setOtpSent] = useState(false);
 
   // Shared state
@@ -110,14 +112,40 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
+      // 1. Verify Firebase credentials
       const fbUser = await loginUser(email, password);
 
-      setOtpTarget(email);
+      // 2. Fetch Firestore profile to get stored phone number
+      const profile = await getUserProfile(fbUser.uid);
 
-      // Send OTP via backend
-      await sendOtp(email);
+      // ── Feature #11 & #12: Route OTP based on detected region ──
+      // South India (TN, KL, KA, AP, TG) → Email OTP
+      // All other states                  → Mobile OTP
+      const channel: 'email' | 'phone' = isSouthIndia ? 'email' : 'phone';
+      setOtpChannel(channel);
+
+      if (channel === 'email') {
+        // Email OTP path — South India users
+        setOtpTarget(email);
+        await sendOtp(email);
+        setSuccess('OTP sent to your email! Check your inbox (and spam folder).');
+      } else {
+        // Mobile OTP path — users from other states
+        const phone = profile?.phone?.trim();
+        if (!phone) {
+          // Graceful fallback: no phone stored → use email OTP
+          setOtpTarget(email);
+          setOtpChannel('email');
+          await sendOtp(email);
+          setSuccess('OTP sent to your email. (No mobile number on file — using email fallback.)');
+        } else {
+          setOtpTarget(phone);
+          await sendOtp(phone);
+          setSuccess(`OTP sent to your mobile number ending in ${phone.slice(-4)}!`);
+        }
+      }
+
       setOtpSent(true);
-      setSuccess(`OTP generated! Check your email inbox or terminal console logs.`);
       setStep('otp');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
@@ -235,7 +263,9 @@ export default function LoginPage() {
           <p className="text-sm mt-1 text-center px-4" style={{ color: 'var(--muted-foreground)' }}>
             {step === 'credentials'
               ? 'Sign in to continue to YouTube Clone'
-              : '📧 Check your email inbox (and spam folder) or terminal console for the OTP'}
+              : otpChannel === 'email'
+              ? '📧 Check your email inbox (and spam folder) for the OTP'
+              : '📱 Check your registered mobile number for the SMS OTP'}
           </p>
         </div>
 
@@ -316,15 +346,28 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* OTP info callout */}
+            {/* OTP info callout — location-aware */}
             <div
               className="flex items-start gap-3 text-xs px-3 py-2.5 rounded-lg"
               style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}
             >
-              <MailIcon />
-              <span>
-                A verification OTP will be sent to your email address and logged to your terminal console after login.
-              </span>
+              {locationLoading ? (
+                <span>⟳ Detecting your location…</span>
+              ) : isSouthIndia ? (
+                <>
+                  <MailIcon />
+                  <span>
+                    📍 <strong>South India detected</strong> — OTP will be sent to your <strong>email address</strong>.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <PhoneIcon />
+                  <span>
+                    📍 <strong>Region detected</strong> — OTP will be sent to your <strong>registered mobile number</strong>.
+                  </span>
+                </>
+              )}
             </div>
 
             <button type="submit" className={btnPrimary} disabled={loading}>
@@ -353,7 +396,7 @@ export default function LoginPage() {
         {/* ── Step 2: OTP verification ────────────────────────────────────── */}
         {step === 'otp' && (
           <form onSubmit={handleOtpVerify} className={`space-y-5 ${stepClass}`} noValidate>
-            {/* Channel info */}
+            {/* Channel info — dynamic based on location */}
             <div
               className="flex items-center gap-3 p-4 rounded-xl"
               style={{ background: 'var(--muted)', border: '1px solid var(--border)' }}
@@ -362,13 +405,22 @@ export default function LoginPage() {
                 className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center"
                 style={{ background: 'oklch(0.577 0.245 27.325 / 15%)', color: 'oklch(0.577 0.245 27.325)' }}
               >
-                <MailIcon />
+                {otpChannel === 'email' ? <MailIcon /> : <PhoneIcon />}
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
-                  Email OTP
+                  {otpChannel === 'email' ? '✉️ Email OTP' : '📱 Mobile OTP'}
                 </p>
-                <p className="text-sm font-medium truncate max-w-[220px]">{otpTarget}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                  {otpChannel === 'email'
+                    ? 'South India region — OTP sent to email'
+                    : 'Other region — OTP sent to mobile'}
+                </p>
+                <p className="text-sm font-medium truncate max-w-[220px] mt-0.5">
+                  {otpChannel === 'phone' && otpTarget.length > 4
+                    ? `${'•'.repeat(otpTarget.length - 4)}${otpTarget.slice(-4)}`
+                    : otpTarget}
+                </p>
               </div>
             </div>
 

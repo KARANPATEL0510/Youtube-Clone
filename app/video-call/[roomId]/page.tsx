@@ -17,7 +17,7 @@ import {
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, Monitor, MonitorOff,
   MessageSquare, Users, PhoneOff, Copy, Share2, Check,
-  Send, X, Loader2, Wifi, WifiOff, Clock,
+  Send, X, Loader2, Wifi, WifiOff, Clock, Circle,
 } from 'lucide-react';
 
 // ── Meeting timer ─────────────────────────────────────────────────────────────
@@ -290,9 +290,11 @@ export default function RoomPage() {
   const {
     localStream, remoteStream,
     isMicEnabled, isCameraEnabled,
-    isScreenSharing, connectionState, mediaError,
+    isScreenSharing, isRecording,
+    connectionState, mediaError,
     toggleMic, toggleCamera,
     startScreenShare, stopScreenShare,
+    startRecording, stopRecording,
     cleanup,
   } = useWebRTC(roomId, isCreator, hasJoined);
 
@@ -440,8 +442,16 @@ export default function RoomPage() {
           </div>
         </div>
 
-        {/* Right: room code + share */}
+        {/* Right: room code + share + REC indicator */}
         <div className="flex items-center gap-2">
+          {/* Recording indicator */}
+          {isRecording && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg animate-pulse"
+              style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)' }}>
+              <Circle className="w-2.5 h-2.5 fill-red-500 text-red-500" />
+              <span className="text-red-400 text-xs font-bold">REC</span>
+            </div>
+          )}
           <button onClick={copyRoomCode}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-gray-300 text-xs font-mono transition hover:bg-white/10"
             style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
@@ -648,6 +658,17 @@ export default function RoomPage() {
           label={`People (${participants.length})`}
           isHighlighted={isParticipantsOpen}
           highlightColor="#8b5cf6"
+        />
+
+        {/* Record / Stop Recording */}
+        <ControlButton
+          onClick={isRecording ? stopRecording : startRecording}
+          active={!isRecording}
+          activeIcon={<Circle className="w-5 h-5" />}
+          inactiveIcon={<Circle className="w-5 h-5 fill-red-500 text-red-500" />}
+          label={isRecording ? 'Stop REC' : 'Record'}
+          isHighlighted={isRecording}
+          highlightColor="#ef4444"
         />
 
         {/* Leave */}
