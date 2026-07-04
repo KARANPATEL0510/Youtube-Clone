@@ -1,12 +1,184 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { Upload, X } from 'lucide-react';
+import { Upload, X, Link2, Film, Image as ImageIcon, CheckCircle2, AlertCircle, Loader2, ChevronDown } from 'lucide-react';
 
+const CATEGORIES = [
+  'Music', 'Gaming', 'Education', 'Entertainment',
+  'Sports', 'Tech', 'Vlog', 'News', 'Comedy', 'Film & Animation',
+  'Science & Technology', 'Travel & Events', 'Pets & Animals', 'General',
+];
+
+const VISIBILITY_OPTIONS = [
+  { value: 'public',   label: 'Public',   sub: 'Anyone can find and watch' },
+  { value: 'unlisted', label: 'Unlisted', sub: 'Only people with the link can watch' },
+  { value: 'private',  label: 'Private',  sub: 'Only you can watch' },
+];
+
+/* ── Tiny custom select so we control all styling ─────────────── */
+function CustomSelect({
+  value, onChange, options, placeholder, disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string; sub?: string }[];
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selected = options.find(o => o.value === value);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(p => !p)}
+        className={`
+          w-full flex items-center justify-between px-4 py-3
+          bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700
+          text-gray-900 dark:text-white rounded-xl
+          focus:outline-none focus:ring-2 focus:ring-red-500
+          transition hover:border-gray-400 dark:hover:border-zinc-500
+          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+        `}
+      >
+        <span className={selected ? '' : 'text-gray-400 dark:text-zinc-500'}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 top-full mt-1 w-full bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto">
+          {placeholder && (
+            <div
+              onClick={() => { onChange(''); setOpen(false); }}
+              className="px-4 py-2.5 text-sm text-gray-400 dark:text-zinc-500 cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-700"
+            >
+              {placeholder}
+            </div>
+          )}
+          {options.map(opt => (
+            <div
+              key={opt.value}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`
+                px-4 py-2.5 cursor-pointer transition
+                ${opt.value === value
+                  ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 font-medium'
+                  : 'text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-zinc-700'}
+              `}
+            >
+              <div className="text-sm font-medium">{opt.label}</div>
+              {opt.sub && <div className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">{opt.sub}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── File drop zone ─────────────────────────────────────────────── */
+function FileDropZone({
+  accept, onFile, file, onClear, label, hint, icon: Icon, disabled,
+}: {
+  accept: string;
+  onFile: (f: File) => void;
+  file: File | null;
+  onClear: () => void;
+  label: string;
+  hint: string;
+  icon: React.ElementType;
+  disabled?: boolean;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) onFile(f);
+  };
+
+  if (file) {
+    return (
+      <div className="flex items-center justify-between bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-green-800 dark:text-green-300 truncate">{file.name}</p>
+            <p className="text-xs text-green-600 dark:text-green-400">
+              {file.size > 1024 * 1024
+                ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+                : `${(file.size / 1024).toFixed(2)} KB`}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClear}
+          disabled={disabled}
+          className="ml-3 p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onDragOver={e => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={handleDrop}
+      onClick={() => !disabled && inputRef.current?.click()}
+      className={`
+        relative border-2 border-dashed rounded-xl px-6 py-8
+        flex flex-col items-center gap-3 cursor-pointer transition
+        ${dragging
+          ? 'border-red-500 bg-red-50 dark:bg-red-950/20'
+          : 'border-gray-200 dark:border-zinc-700 hover:border-red-400 hover:bg-red-50/50 dark:hover:bg-red-950/10'}
+        ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+      `}
+    >
+      <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/40 flex items-center justify-center">
+        <Icon className="w-6 h-6 text-red-600 dark:text-red-400" />
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{label}</p>
+        <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{hint}</p>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        disabled={disabled}
+        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+      />
+    </div>
+  );
+}
+
+/* ── Main page ──────────────────────────────────────────────────── */
 export default function UploadPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -16,159 +188,85 @@ export default function UploadPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadStep, setUploadStep] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const [hasChannel, setHasChannel] = useState(false);
+  const [hasChannel, setHasChannel] = useState<boolean | null>(null);
   const [uploadMode, setUploadMode] = useState<'url' | 'file'>('url');
 
   useEffect(() => {
     if (!user) return;
-
-    const fetchChannel = async () => {
-      try {
-        const res = await fetch(`/api/channels?userId=${user.uid}`);
-        if (res.ok) {
-          setHasChannel(true);
-        } else {
-          setError('Please create a channel before uploading videos');
-        }
-      } catch (fetchError) {
-        console.error(fetchError);
-        setError('Unable to verify channel');
-      }
-    };
-
-    fetchChannel();
+    fetch(`/api/channels?userId=${user.uid}`)
+      .then(res => setHasChannel(res.ok))
+      .catch(() => setHasChannel(false));
   }, [user]);
 
-  if (loading) return <div className="p-8">Loading...</div>;
-  if (!user) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-red-600 mb-4">Please log in to upload videos</p>
-        <button
-          onClick={() => router.push('/auth/login')}
-          className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700"
-        >
-          Log In
-        </button>
-      </div>
-    );
-  }
-
-  if (!hasChannel) {
-    return (
-      <div className="max-w-2xl mx-auto p-8">
-        <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-        <button
-          onClick={() => router.push('/create-channel')}
-          className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
-        >
-          Create Channel
-        </button>
-      </div>
-    );
-  }
-
-  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024 * 1024) {
-        setError('Video file must be less than 5GB');
-        return;
-      }
-      if (!file.type.startsWith('video/')) {
-        setError('Please select a valid video file');
-        return;
-      }
-      // All formats supported — non-MP4 are auto-converted server-side
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      const willConvert = ['mov', 'avi', 'mkv', 'flv'].includes(ext ?? '');
-      if (willConvert) {
-        setError(null); // clear any old error
-      } else {
-        setError(null);
-      }
-      setVideoFile(file);
-    }
+  const handleVideoFile = (file: File) => {
+    if (file.size > 5 * 1024 * 1024 * 1024) { setError('Video must be under 5 GB'); return; }
+    if (!file.type.startsWith('video/')) { setError('Please select a valid video file'); return; }
+    setVideoFile(file); setError(null);
   };
 
-  const handleThumbnailFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        setError('Thumbnail must be less than 10MB');
-        return;
-      }
-      if (!file.type.startsWith('image/')) {
-        setError('Please select a valid image file');
-        return;
-      }
-      setThumbnailFile(file);
-      setError(null);
-    }
+  const handleThumbnailFile = (file: File) => {
+    if (file.size > 10 * 1024 * 1024) { setError('Thumbnail must be under 10 MB'); return; }
+    if (!file.type.startsWith('image/')) { setError('Please select a valid image file'); return; }
+    setThumbnailFile(file); setError(null);
   };
 
-  const uploadFileToMongoDB = async (file: File, fileType: 'video' | 'thumbnail'): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('userId', user.uid);
-    formData.append('fileType', fileType);
+  const uploadToMongoDB = async (file: File, fileType: 'video' | 'thumbnail'): Promise<string> => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('userId', user!.uid);
+    form.append('fileType', fileType);
 
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
+    const res = await fetch('/api/upload', { method: 'POST', body: form });
+    const text = await res.text();
 
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || 'File upload failed');
+    let data: { url?: string; error?: string };
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(res.status === 413
+        ? 'File is too large. Please upload a smaller file (max ~4 GB on this server).'
+        : `Upload failed: server returned unexpected response (${res.status})`);
     }
 
-    const data = await response.json();
-    return data.url;
+    if (!res.ok) throw new Error(data.error || 'File upload failed');
+    return data.url!;
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setUploading(true);
+    setUploadStep('');
 
     try {
-      if (!title) {
-        throw new Error('Please fill in the video title');
-      }
+      if (!title.trim()) throw new Error('Please enter a video title');
 
       let finalVideoUrl = videoUrl;
       let finalThumbnailUrl = thumbnailUrl;
 
-      // Handle file uploads
       if (uploadMode === 'file') {
-        if (!videoFile) {
-          throw new Error('Please select a video file');
-        }
-        if (!thumbnailFile) {
-          throw new Error('Please select a thumbnail file');
-        }
+        if (!videoFile) throw new Error('Please select a video file');
+        if (!thumbnailFile) throw new Error('Please select a thumbnail image');
 
-        setError('Uploading and converting video… This may take a few minutes for large or non-MP4 files.');
-        finalVideoUrl = await uploadFileToMongoDB(videoFile, 'video');
-        finalThumbnailUrl = await uploadFileToMongoDB(thumbnailFile, 'thumbnail');
-        setError(null);
+        setUploadStep('Uploading thumbnail…');
+        finalThumbnailUrl = await uploadToMongoDB(thumbnailFile, 'thumbnail');
+
+        setUploadStep('Uploading & processing video… This may take a few minutes.');
+        finalVideoUrl = await uploadToMongoDB(videoFile, 'video');
+        setUploadStep('Saving video details…');
       } else {
-        if (!videoUrl || !thumbnailUrl) {
-          throw new Error('Please fill in all required fields');
-        }
+        if (!videoUrl.trim() || !thumbnailUrl.trim()) throw new Error('Please fill in Video URL and Thumbnail URL');
       }
 
       const res = await fetch('/api/uploads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: user.uid,
-          title,
-          description,
+          userId: user!.uid,
+          title: title.trim(),
+          description: description.trim(),
           category: category || 'General',
           videoUrl: finalVideoUrl,
           thumbnailUrl: finalThumbnailUrl,
@@ -176,234 +274,243 @@ export default function UploadPage() {
         }),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Upload failed');
-      }
+      const resText = await res.text();
+      let resData: { error?: string };
+      try { resData = JSON.parse(resText); } catch { resData = {}; }
 
-      await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to save video');
+
       router.push('/channel-dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
+      setUploadStep('');
     }
   };
 
-  return (
-    <div className="max-w-2xl mx-auto p-8">
-      <h1 className="text-4xl font-bold mb-8">Upload Video</h1>
+  /* ── Loading / auth guards ────────────────────────────────── */
+  if (loading || hasChannel === null) {
+    return (
+      <div className="flex-1 min-h-[60vh] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-red-500" />
+      </div>
+    );
+  }
 
-      {/* Format Support Info */}
-      <div className="bg-green-50 border border-green-300 text-green-800 px-4 py-3 rounded mb-4 text-sm">
-        <p className="font-semibold mb-1">✓ All video formats supported</p>
-        <p className="text-xs">MP4, WebM, MOV, AVI, MKV — non-MP4 formats are automatically converted to MP4 on upload.</p>
+  if (!user) {
+    return (
+      <div className="flex-1 min-h-[60vh] flex items-center justify-center p-8">
+        <div className="text-center">
+          <p className="text-gray-600 dark:text-gray-400 mb-4">Please log in to upload videos</p>
+          <button onClick={() => router.push('/auth/login')} className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition">Log In</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasChannel) {
+    return (
+      <div className="flex-1 min-h-[60vh] flex items-center justify-center p-8">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 bg-red-100 dark:bg-red-950/40 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Film className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Create a channel first</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">You need a channel before you can upload videos</p>
+          <button onClick={() => router.push('/create-channel')} className="bg-red-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-red-700 transition">
+            Create Channel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center shadow">
+            <Upload className="w-5 h-5 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Upload Video</h1>
+        </div>
+        <p className="text-sm text-gray-500 dark:text-gray-400 ml-13 pl-0.5">Share your content with the world</p>
       </div>
 
+      {/* Mode toggle */}
+      <div className="flex gap-2 p-1 bg-gray-100 dark:bg-zinc-800 rounded-xl mb-8">
+        {([
+          { mode: 'file', icon: Upload, label: 'Upload from Device' },
+          { mode: 'url',  icon: Link2,  label: 'Use a URL Link' },
+        ] as const).map(({ mode, icon: Icon, label }) => (
+          <button
+            key={mode}
+            type="button"
+            disabled={uploading}
+            onClick={() => setUploadMode(mode)}
+            className={`
+              flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition
+              ${uploadMode === mode
+                ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow'
+                : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'}
+            `}
+          >
+            <Icon className="w-4 h-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Error banner */}
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+        <div className="flex items-start gap-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl mb-6 text-sm">
+          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
+          <button type="button" onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      {/* Upload Mode Toggle */}
-      <div className="flex gap-2 mb-6">
-        <button
-          type="button"
-          onClick={() => setUploadMode('file')}
-          className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
-            uploadMode === 'file'
-              ? 'bg-red-600 text-white'
-              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-          }`}
-          disabled={uploading}
-        >
-          <Upload className="inline w-4 h-4 mr-2" />
-          Upload from Device
-        </button>
-        <button
-          type="button"
-          onClick={() => setUploadMode('url')}
-          className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
-            uploadMode === 'url'
-              ? 'bg-red-600 text-white'
-              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-          }`}
-          disabled={uploading}
-        >
-          Link
-        </button>
-      </div>
+      {/* Upload progress */}
+      {uploadStep && (
+        <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-400 px-4 py-3 rounded-xl mb-6 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+          <span>{uploadStep}</span>
+        </div>
+      )}
 
       <form onSubmit={handleUpload} className="space-y-6">
+        {/* Title */}
         <div>
-          <label className="block text-sm font-medium mb-2">Video Title *</label>
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Video Title <span className="text-red-500">*</span></label>
           <input
             type="text"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-            placeholder="My awesome video"
+            onChange={e => setTitle(e.target.value)}
             disabled={uploading}
+            placeholder="Give your video a great title"
+            maxLength={150}
+            className="w-full px-4 py-3 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 transition placeholder-gray-400 dark:placeholder-zinc-500"
           />
+          <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1 text-right">{title.length}/150</p>
         </div>
 
+        {/* Description */}
         <div>
-          <label className="block text-sm font-medium mb-2">Description</label>
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Description</label>
           <textarea
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-            placeholder="Describe your video..."
-            rows={4}
+            onChange={e => setDescription(e.target.value)}
             disabled={uploading}
+            placeholder="Tell viewers about your video…"
+            rows={4}
+            maxLength={5000}
+            className="w-full px-4 py-3 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 transition resize-none placeholder-gray-400 dark:placeholder-zinc-500"
           />
         </div>
 
+        {/* Category */}
         <div>
-          <label className="block text-sm font-medium mb-2">Category</label>
-          <select
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Category</label>
+          <CustomSelect
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+            onChange={setCategory}
+            placeholder="Select a category"
             disabled={uploading}
-          >
-            <option value="">Select a category</option>
-            <option value="Music">Music</option>
-            <option value="Gaming">Gaming</option>
-            <option value="Education">Education</option>
-            <option value="Entertainment">Entertainment</option>
-            <option value="Sports">Sports</option>
-            <option value="Tech">Tech</option>
-            <option value="Vlog">Vlog</option>
-          </select>
+            options={CATEGORIES.map(c => ({ value: c, label: c }))}
+          />
         </div>
 
+        {/* File upload mode */}
         {uploadMode === 'file' ? (
           <>
-            {/* Video File Upload */}
             <div>
-              <label className="block text-sm font-medium mb-2">Video File *</label>
-              <div className="flex items-center gap-4">
-                <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-red-300 rounded-lg cursor-pointer hover:bg-red-50 transition">
-                  <Upload className="w-5 h-5 text-red-600" />
-                  <span className="text-red-600 font-medium">Choose video file</span>
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={handleVideoFileChange}
-                    disabled={uploading}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-              {videoFile && (
-                <div className="mt-2 flex items-center justify-between bg-green-50 p-2 rounded border border-green-200">
-                  <span className="text-sm text-green-700">
-                    ✓ {videoFile.name} ({(videoFile.size / (1024 * 1024)).toFixed(2)}MB)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setVideoFile(null)}
-                    className="text-red-600 hover:text-red-800"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-              <p className="text-xs text-gray-500 mt-1">Max 5GB. Formats: MP4, WebM, MOV, etc.</p>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Video File <span className="text-red-500">*</span></label>
+              <FileDropZone
+                accept="video/*"
+                onFile={handleVideoFile}
+                file={videoFile}
+                onClear={() => setVideoFile(null)}
+                label="Click or drag & drop your video"
+                hint="MP4, WebM, MOV, AVI, MKV · Max 5 GB"
+                icon={Film}
+                disabled={uploading}
+              />
             </div>
-
-            {/* Thumbnail File Upload */}
             <div>
-              <label className="block text-sm font-medium mb-2">Thumbnail Image *</label>
-              <div className="flex items-center gap-4">
-                <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-red-300 rounded-lg cursor-pointer hover:bg-red-50 transition">
-                  <Upload className="w-5 h-5 text-red-600" />
-                  <span className="text-red-600 font-medium">Choose thumbnail</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleThumbnailFileChange}
-                    disabled={uploading}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-              {thumbnailFile && (
-                <div className="mt-2 flex items-center justify-between bg-green-50 p-2 rounded border border-green-200">
-                  <span className="text-sm text-green-700">
-                    ✓ {thumbnailFile.name} ({(thumbnailFile.size / 1024).toFixed(2)}KB)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setThumbnailFile(null)}
-                    className="text-red-600 hover:text-red-800"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-              <p className="text-xs text-gray-500 mt-1">Max 10MB. Formats: JPG, PNG, WebP</p>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Thumbnail <span className="text-red-500">*</span></label>
+              <FileDropZone
+                accept="image/*"
+                onFile={handleThumbnailFile}
+                file={thumbnailFile}
+                onClear={() => setThumbnailFile(null)}
+                label="Click or drag & drop your thumbnail"
+                hint="JPG, PNG, WebP · Max 10 MB · Recommended 1280×720"
+                icon={ImageIcon}
+                disabled={uploading}
+              />
             </div>
           </>
         ) : (
           <>
-            {/* Video URL Input */}
             <div>
-              <label className="block text-sm font-medium mb-2">Video URL *</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Video URL <span className="text-red-500">*</span></label>
               <input
                 type="url"
                 value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder="https://example.com/video.mp4"
+                onChange={e => setVideoUrl(e.target.value)}
                 disabled={uploading}
+                placeholder="https://example.com/video.mp4"
+                className="w-full px-4 py-3 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 transition placeholder-gray-400 dark:placeholder-zinc-500"
               />
-              <p className="text-xs text-gray-500 mt-1">Direct link to MP4 or HLS stream</p>
+              <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">Direct link to MP4, WebM, or HLS stream</p>
             </div>
-
-            {/* Thumbnail URL Input */}
             <div>
-              <label className="block text-sm font-medium mb-2">Thumbnail URL *</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Thumbnail URL <span className="text-red-500">*</span></label>
               <input
                 type="url"
                 value={thumbnailUrl}
-                onChange={(e) => setThumbnailUrl(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                placeholder="https://example.com/thumbnail.jpg"
+                onChange={e => setThumbnailUrl(e.target.value)}
                 disabled={uploading}
+                placeholder="https://example.com/thumbnail.jpg"
+                className="w-full px-4 py-3 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 transition placeholder-gray-400 dark:placeholder-zinc-500"
               />
             </div>
           </>
         )}
 
+        {/* Visibility */}
         <div>
-          <label className="block text-sm font-medium mb-2">Visibility</label>
-          <select
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Visibility</label>
+          <CustomSelect
             value={visibility}
-            onChange={(e) => setVisibility(e.target.value)}
-            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+            onChange={setVisibility}
             disabled={uploading}
-          >
-            <option value="public">Public - Anyone can find and watch</option>
-            <option value="unlisted">Unlisted - Only people with link can watch</option>
-            <option value="private">Private - Only you can watch</option>
-          </select>
+            options={VISIBILITY_OPTIONS}
+          />
         </div>
 
+        {/* Submit */}
         <button
           type="submit"
           disabled={uploading || (uploadMode === 'file' && (!videoFile || !thumbnailFile))}
-          className="w-full bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50"
+          className="w-full bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 disabled:from-gray-400 disabled:to-gray-400 dark:disabled:from-zinc-700 dark:disabled:to-zinc-700 text-white font-bold py-4 rounded-xl shadow-md transition flex items-center justify-center gap-2"
         >
-          {uploading ? 'Uploading...' : 'Upload Video'}
+          {uploading ? (
+            <><Loader2 className="w-5 h-5 animate-spin" /> Uploading…</>
+          ) : (
+            <><Upload className="w-5 h-5" /> Publish Video</>
+          )}
         </button>
-      </form>
 
-      <p className="text-sm text-gray-600 mt-8">
-        * Required fields. {uploadMode === 'file' ? 'Files will be uploaded to cloud storage.' : 'Note: Use externally hosted video URLs or Firebase Storage links.'}
-      </p>
+        <p className="text-xs text-center text-gray-400 dark:text-zinc-500">
+          {uploadMode === 'file'
+            ? '* Files are uploaded securely to cloud storage.'
+            : '* Use a direct-access video URL (Firebase Storage, Cloudinary, etc.)'}
+        </p>
+      </form>
     </div>
   );
 }
