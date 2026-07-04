@@ -10,8 +10,8 @@ import { randomUUID } from 'crypto';
 
 // Allow large video file uploads — disable Next.js default 4.5MB body limit
 export const maxDuration = 300; // 5 minutes timeout for large uploads
-// Remove the default body-size cap so large files aren't rejected as 413 before the handler runs
-export const maxBodySize = '5gb';
+// 5 GB in bytes — removes the default body-size cap for this route
+export const maxBodySize = 5 * 1024 * 1024 * 1024;
 
 /** Formats that browsers can play natively — no conversion needed */
 const BROWSER_NATIVE = new Set([

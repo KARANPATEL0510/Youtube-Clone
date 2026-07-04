@@ -4,6 +4,12 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Raise body-size limit for large video uploads
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '5gb',
+    },
+  },
   images: {
     dangerouslyAllowSVG: true,
     contentDispositionType: "attachment",
