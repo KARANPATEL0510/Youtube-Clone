@@ -218,20 +218,33 @@ export default function UploadPage() {
     form.append('userId', user!.uid);
     form.append('fileType', fileType);
 
-    const res = await fetch('/api/upload', { method: 'POST', body: form });
-    const text = await res.text();
+    let res: Response;
+    try {
+      res = await fetch('/api/upload', { method: 'POST', body: form });
+    } catch (networkErr) {
+      throw new Error('Network error — check your internet connection and try again.');
+    }
 
-    let data: { url?: string; error?: string };
+    // Read response as text first so we never crash on non-JSON bodies
+    const text = await res.text().catch(() => '');
+
+    if (res.status === 413) {
+      throw new Error('The server rejected the file as too large. Check that your Next.js / server body-size limit is configured correctly.');
+    }
+
+    // Try to parse as JSON
+    let data: { url?: string; error?: string } = {};
     try {
       data = JSON.parse(text);
     } catch {
-      throw new Error(res.status === 413
-        ? 'File is too large. Please upload a smaller file (max ~4 GB on this server).'
-        : `Upload failed: server returned unexpected response (${res.status})`);
+      // Server returned non-JSON (e.g. an HTML error page or plain text)
+      const preview = text.slice(0, 200);
+      throw new Error(`Server returned an unexpected response (HTTP ${res.status}): ${preview || '(empty body)'}`);
     }
 
-    if (!res.ok) throw new Error(data.error || 'File upload failed');
-    return data.url!;
+    if (!res.ok) throw new Error(data.error || `Upload failed (HTTP ${res.status})`);
+    if (!data.url) throw new Error('Upload succeeded but no file URL was returned. Check the server logs.');
+    return data.url;
   };
 
   const handleUpload = async (e: React.FormEvent) => {
