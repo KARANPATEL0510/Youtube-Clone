@@ -10,8 +10,8 @@ import { getAllVideos, Video as FirestoreVideo } from '@/lib/db/videos';
 
 const SAMPLE_VIDEO_URLS = [
   'https://www.w3schools.com/html/mov_bbb.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+  'https://media.w3.org/2010/05/sintel/trailer.mp4',
+  'https://media.w3.org/2010/05/bunny/trailer.mp4',
 ];
 
 interface PremiumVideo {
