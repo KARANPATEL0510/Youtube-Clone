@@ -12,13 +12,32 @@ import {
   Room,
 } from '@/lib/db/rooms';
 
-// ── STUN configuration ────────────────────────────────────────────────────────
+// ── STUN + TURN configuration ─────────────────────────────────────────────────
+// TURN servers are essential for users behind symmetric NATs / firewalls.
+// Without TURN, the peer connection may establish at signaling level but
+// no actual media (video/audio) can flow between the peers.
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
+    // Free TURN servers (Open Relay Project) — reliable fallback
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
+  iceTransportPolicy: 'all',
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -58,12 +77,15 @@ export function useWebRTC(
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const offerCreatedRef = useRef(false);
   const answerCreatedRef = useRef(false);
   const unsubs = useRef<Array<() => void>>([]);
+  // Counter to force React re-renders when tracks are added to the stable remote stream
+  const [, setTrackUpdateCounter] = useState(0);
 
   // ── Acquire user media ────────────────────────────────────────────────────
   useEffect(() => {
@@ -114,11 +136,16 @@ export function useWebRTC(
     localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
     // ── Receive remote tracks (handles initial + screen-share replacements) ──
+    // Use a single stable MediaStream object so tracks don't get lost
+    // when audio and video arrive at different times.
     const remoteMediaStream = new MediaStream();
+    remoteStreamRef.current = remoteMediaStream;
     setRemoteStream(remoteMediaStream);
 
     pc.ontrack = (event) => {
       const incomingTrack = event.track;
+      console.log('[WebRTC] Remote track received:', incomingTrack.kind, 'id:', incomingTrack.id);
+
       // Remove any existing track of the same kind before adding the new one
       remoteMediaStream.getTracks().forEach((existing) => {
         if (existing.kind === incomingTrack.kind) {
@@ -126,8 +153,27 @@ export function useWebRTC(
         }
       });
       remoteMediaStream.addTrack(incomingTrack);
-      // Trigger React re-render so the remote video element picks up the change
-      setRemoteStream(new MediaStream(remoteMediaStream.getTracks()));
+
+      // Force React to re-render so the <video> element picks up the new track,
+      // while keeping the same MediaStream reference so previously added tracks
+      // are not lost.
+      setRemoteStream(remoteMediaStream);
+      setTrackUpdateCounter((c) => c + 1);
+
+      // Handle track ending (e.g. remote user turned off camera)
+      incomingTrack.onended = () => {
+        console.log('[WebRTC] Remote track ended:', incomingTrack.kind);
+      };
+
+      // Handle track muting (remote user muted mic/camera)
+      incomingTrack.onmute = () => {
+        console.log('[WebRTC] Remote track muted:', incomingTrack.kind);
+      };
+      incomingTrack.onunmute = () => {
+        console.log('[WebRTC] Remote track unmuted:', incomingTrack.kind);
+        // Force re-render on unmute to ensure video plays
+        setTrackUpdateCounter((c) => c + 1);
+      };
     };
 
     // ── Connection state ───────────────────────────────────────────────────

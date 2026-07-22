@@ -54,10 +54,19 @@ function VideoTile({
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream]);
+    const video = videoRef.current;
+    if (!video || !stream) return;
+
+    // Always reassign srcObject to ensure the video element picks up
+    // newly added tracks (audio arriving after video or vice versa)
+    video.srcObject = stream;
+
+    // Ensure playback starts — browsers may pause autoplay in some cases
+    video.play().catch((err) => {
+      // Autoplay may be blocked; user interaction will resume it
+      console.warn('[VideoTile] play() failed:', err.message);
+    });
+  }, [stream, stream?.getTracks().length]);
 
   return (
     <div className="relative w-full h-full rounded-2xl overflow-hidden flex items-center justify-center"
